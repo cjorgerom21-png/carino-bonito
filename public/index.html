@@ -1677,7 +1677,7 @@ async function bReg(eid, tipo) {
     emp.cervezas += qty;
     c.vendidas = (c.vendidas||0) + qty;
     totalCervG += qty;
-    emp.rb.unshift({h:horaStr, marca:c.nombre, qty, tipo:'manual', mesa:null});
+    emp.rb.unshift({h:horaStr, marca:c.nombre, qty, tipo:'salio', mesa:null});
     historial.unshift({h:horaStr,mesa:'Bar',tipo:'bar',txt:`${emp.nombre} → ${qty}× ${c.nombre}`,monto:qty*precioReal,chica:emp.nombre,icon:'🍺'});
     mostrarToast(`✅ ${qty}× ${c.nombre} → ${emp.nombre}`);
   } else {
@@ -1707,6 +1707,21 @@ async function bReg(eid, tipo) {
       <span class="breg-q ${esDevol?'neg':'pos'}">${esDevol?'−':'+'}${r.qty}</span>
     </div>`;
   }).join('') : '<div style="color:var(--txt2);font-size:11px;padding:6px;text-align:center">Sin movimientos</div>';
+
+  // Actualizar también el historial global de la tabla
+  const allMovs = empleadas.flatMap(e=>e.rb.map(r=>({...r,emp:e.nombre,col:e.color}))).sort((a,b)=>b.h.localeCompare(a.h));
+  const elHist = document.getElementById('bar-hist');
+  if(elHist) elHist.innerHTML = allMovs.length ? allMovs.slice(0,40).map(r=>{
+    const cv = cervezas.find(x=>x.nombre===r.marca);
+    return `<tr>
+      <td>${r.h}</td>
+      <td><span style="background:${r.col||'#93C5FD'};border-radius:99px;padding:1px 8px;font-size:10px;font-weight:600;color:#1e3a5f">${r.emp}</span></td>
+      <td>${r.mesa?'Mesa '+r.mesa:'Bar'}</td>
+      <td>${r.marca}</td>
+      <td style="font-weight:700;color:${r.tipo==='devol'?'var(--roj)':'var(--vrd)'}">${r.tipo==='devol'?'−':'+'}${r.qty}</td>
+      <td>${r.tipo==='devol'?'—':'S/'+(r.qty*(cv?cv.precio:0)).toFixed(2)}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--txt2);padding:14px">Sin movimientos</td></tr>';
 
   // Actualizar ranking y stats globales
   const elBigCerv = document.getElementById('bar-big');

@@ -1033,14 +1033,7 @@ function rBarCards(){
           </div>
           <div id="cobrado-badge-${e.id}">${e.cobrado?`<div class="cobrado-badge">✓ Turno cobrado a las ${e.horaCobro}</div>`:''}</div>
         </div>
-        <div class="bar-reg" id="breg-${e.id}">
-          ${e.rb.length?e.rb.slice(0,8).map(r=>`
-            <div class="breg-row">
-              <span class="breg-h">${r.h}</span>
-              <span class="breg-t">${r.marca}${r.tipo==='devol'?' (devol)':r.tipo==='manual'?' (manual)':''}${r.mesa?' M'+r.mesa:''}</span>
-              <span class="breg-q ${r.tipo==='devol'?'neg':'pos'}">${r.tipo==='devol'?'−':'+'}${r.qty}</span>
-            </div>`).join(''):'<div style="color:var(--txt2);font-size:11px;padding:6px;text-align:center">Sin movimientos</div>'}
-        </div>
+        <div class="bar-reg" id="breg-${e.id}"></div>
       </div>
     </div>`;
   }).join('');
@@ -1078,12 +1071,15 @@ function rBarStats(){
     if(elPrec) elPrec.innerHTML=calcPrecuentaLineas(e);
     // Registro de movimientos
     const elReg=document.getElementById('breg-'+e.id);
-    if(elReg) elReg.innerHTML=e.rb.length?e.rb.slice(0,8).map(r=>`
-      <div class="breg-row">
+    if(elReg) elReg.innerHTML=e.rb.length?e.rb.slice(0,8).map(r=>{
+      const esDevol=r.tipo==='devol';
+      const sufijo=esDevol?' (devol)':r.mesa?' M'+r.mesa:'';
+      return `<div class="breg-row">
         <span class="breg-h">${r.h}</span>
-        <span class="breg-t">${r.marca}${r.tipo==='devol'?' (devol)':r.tipo==='manual'?' (manual)':''}${r.mesa?' M'+r.mesa:''}</span>
-        <span class="breg-q ${r.tipo==='devol'?'neg':'pos'}">${r.tipo==='devol'?'−':'+'}${r.qty}</span>
-      </div>`).join(''):'<div style="color:var(--txt2);font-size:11px;padding:6px;text-align:center">Sin movimientos</div>';
+        <span class="breg-t">${r.marca}${sufijo}</span>
+        <span class="breg-q ${esDevol?'neg':'pos'}">${esDevol?'−':'+'}${r.qty}</span>
+      </div>`;
+    }).join(''):'<div style="color:var(--txt2);font-size:11px;padding:6px;text-align:center">Sin movimientos</div>';
     // Cobrar btn
     const elBtn=document.getElementById('cbtn-'+e.id);
     if(elBtn){ elBtn.textContent=e.cobrado?'✓ Cobrado':'💰 Cobrar turno'; }

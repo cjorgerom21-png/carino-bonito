@@ -784,29 +784,9 @@ tr:hover td{background:var(--blue6)}
 const COLS=['#60A5FA','#34D399','#FBBF24','#F472B6','#A78BFA','#38BDF8','#4ADE80','#FB923C'];
 let numMesas=10;
 let mesas=mkMesas(numMesas);
-let empleadas=[
-  {id:1,nombre:'Ana',color:'#60A5FA',turno:'Tarde',entrada:'15:00',salida:'22:00',rol:'Moza',mesas:[],cervezas:0,ventas:0,rb:[],cobrado:false,horaCobro:null},
-  {id:2,nombre:'Carla',color:'#34D399',turno:'Tarde',entrada:'15:00',salida:'22:00',rol:'Moza',mesas:[],cervezas:0,ventas:0,rb:[],cobrado:false,horaCobro:null},
-  {id:3,nombre:'Diana',color:'#FBBF24',turno:'Mañana',entrada:'08:00',salida:'15:00',rol:'Barista',mesas:[],cervezas:0,ventas:0,rb:[],cobrado:false,horaCobro:null},
-  {id:4,nombre:'Sofía',color:'#F472B6',turno:'Noche',entrada:'18:00',salida:'02:00',rol:'Encargada',mesas:[],cervezas:0,ventas:0,rb:[],cobrado:false,horaCobro:null},
-];
-let cervezas=[
-  {id:'pilsen',nombre:'Pilsen',precio:8,icon:'🍺',stock:48,vendidas:0},
-  {id:'cristal',nombre:'Cristal',precio:8,icon:'🍻',stock:48,vendidas:0},
-  {id:'cusquena',nombre:'Cusqueña',precio:10,icon:'🍺',stock:36,vendidas:0},
-  {id:'corona',nombre:'Corona',precio:12,icon:'🍺',stock:24,vendidas:0},
-  {id:'heineken',nombre:'Heineken',precio:12,icon:'🍻',stock:24,vendidas:0},
-];
-let menu=[
-  {id:'lo',nombre:'Lomo saltado',precio:28,cat:'Principales'},
-  {id:'ce',nombre:'Ceviche mixto',precio:32,cat:'Principales'},
-  {id:'ar',nombre:'Arroz con pollo',precio:22,cat:'Principales'},
-  {id:'pa',nombre:'Papas a la huancaína',precio:14,cat:'Entradas'},
-  {id:'pi',nombre:'Piqueo surtido',precio:45,cat:'Entradas'},
-  {id:'ca',nombre:'Causa rellena',precio:18,cat:'Entradas'},
-  {id:'ti',nombre:'Tiradito',precio:26,cat:'Principales'},
-  {id:'fl',nombre:'Flan de lúcuma',precio:12,cat:'Postres'},
-];
+let empleadas=[];
+let cervezas=[];
+let menu=[];
 let mesaSel=null,pedidoActual={},historial=[];
 let totalDia=0,mesasCob=0,totalCervG=0,totalMenu=0;
 let editEmpId=null,colorSel=COLS[0];
@@ -1037,12 +1017,7 @@ function rBarCards(){
         <div class="cerv-tipo-sel" id="bct-${e.id}">
           ${(()=>{
             // Agrupar por categoría en el bar
-            const cats=[...new Set(cervezas.map(c=>c.cat||'Cervezas'))];
-            return cats.map(cat=>{
-              const items=cervezas.filter(c=>(c.cat||'Cervezas')===cat);
-              return `<div style="width:100%;font-size:9px;font-weight:700;color:var(--txt2);text-transform:uppercase;letter-spacing:.4px;margin:4px 0 3px">${cat}</div>`+
-                items.map(c=>`<button class="cts ${String(st.cid)===String(c.id)?'sel':''}" data-cid="${c.id}" onclick="selCT(${e.id},'${c.id}')">${c.icon} ${c.nombre}<span style="font-size:9px;opacity:.7;margin-left:3px">S/${(parseFloat(c.precio)||0).toFixed(0)}</span></button>`).join('');
-            }).join('');
+            return cervezas.map(c=>`<button class="cts ${String(st.cid)===String(c.id)?'sel':''}" data-cid="${c.id}" onclick="selCT(${e.id},'${c.id}')">${c.icon} ${c.nombre}<span style="font-size:9px;opacity:.7;margin-left:3px">S/${(parseFloat(c.precio)||0).toFixed(0)}</span></button>`).join('');
           })()}
         </div>
         <div class="bar-ctrl">

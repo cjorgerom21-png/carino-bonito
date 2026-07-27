@@ -141,44 +141,10 @@ function crearTablas() {
 }
 
 function insertarDatosIniciales() {
-  const empCount = get('SELECT COUNT(*) as n FROM empleadas').n;
-  if (empCount === 0) {
-    const ins = db.prepare('INSERT INTO empleadas (nombre,color,turno,entrada,salida,rol) VALUES (?,?,?,?,?,?)');
-    [
-      ['Ana',   '#60A5FA','Tarde',  '15:00','22:00','Moza'],
-      ['Carla', '#34D399','Tarde',  '15:00','22:00','Moza'],
-      ['Diana', '#FBBF24','Mañana', '08:00','15:00','Barista'],
-      ['Sofía', '#F472B6','Noche',  '18:00','02:00','Encargada'],
-    ].forEach(e => ins.run(e));
-  }
-  const cervCount = get('SELECT COUNT(*) as n FROM cervezas').n;
-  if (cervCount === 0) {
-    const ins = db.prepare('INSERT INTO cervezas (nombre,precio,icon,stock) VALUES (?,?,?,?)');
-    [
-      ['Pilsen',   8,  '🍺', 48],
-      ['Cristal',  8,  '🍻', 48],
-      ['Cusqueña', 10, '🍺', 36],
-      ['Corona',   12, '🍺', 24],
-      ['Heineken', 12, '🍻', 24],
-    ].forEach(c => ins.run(c));
-  }
-  const platCount = get('SELECT COUNT(*) as n FROM platos').n;
-  if (platCount === 0) {
-    const ins = db.prepare('INSERT INTO platos (nombre,precio,categoria) VALUES (?,?,?)');
-    [
-      ['Lomo saltado',28,'Principales'],
-      ['Ceviche mixto',32,'Principales'],
-      ['Arroz con pollo',22,'Principales'],
-      ['Papas a la huancaína',14,'Entradas'],
-      ['Piqueo surtido',45,'Entradas'],
-      ['Causa rellena',18,'Entradas'],
-      ['Tiradito',26,'Principales'],
-      ['Flan de lúcuma',12,'Postres'],
-    ].forEach(p => ins.run(p));
-  }
+  // Solo crear mesas si no existen — sin datos de ejemplo hardcodeados
   const mesaCount = get('SELECT COUNT(*) as n FROM mesas').n;
   if (mesaCount === 0) {
-    const ins = db.prepare('INSERT INTO mesas (id,estado) VALUES (?,?)');
+    const ins = db.prepare('INSERT OR IGNORE INTO mesas (id,estado) VALUES (?,?)');
     for (let i = 1; i <= 10; i++) ins.run([i, 'libre']);
   }
 }

@@ -13,6 +13,19 @@ app.use(express.static(path.join(__dirname, 'public')));
 function hoy()  { return new Date().toISOString().split('T')[0]; }
 function hora() { return new Date().toTimeString().slice(0,5); }
 
+// ── STATUS / DIAGNÓSTICO ─────────────────────────────────
+app.get('/api/status', (_,res) => {
+  const { DB_PATH } = require('./database');
+  const fs = require('fs');
+  res.json({
+    db_path: DB_PATH,
+    db_exists: fs.existsSync(DB_PATH),
+    volume_env: process.env.RAILWAY_VOLUME_MOUNT_PATH || null,
+    data_dir_exists: fs.existsSync('/data'),
+    uptime: process.uptime()
+  });
+});
+
 // ── EMPLEADAS ────────────────────────────────────────────
 app.get('/api/empleadas', (_,res) => {
   res.json(all('SELECT * FROM empleadas WHERE activa=1 ORDER BY id'));

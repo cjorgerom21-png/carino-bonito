@@ -192,4 +192,4 @@ try { db.prepare("DELETE FROM bar_movimientos WHERE marca='CIERRE_TURNO' OR tipo
 
 console.log(`📦 DB en: ${DB_PATH}`);
 
-module.exports = { db, run, all, get, insert };
+module.exports = { db, run, all, get, insert, DB_PATH };

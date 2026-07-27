@@ -165,6 +165,16 @@ app.post('/api/bar/movimientos', (req,res) => {
   res.json({ok:true,hora:hr});
 });
 
+// ── COBRO DE TURNO EMPLEADA ──────────────────────────────
+app.post('/api/bar/cobrar-turno', (req, res) => {
+  const { empleada_id, total, cervezas: totalCerv } = req.body;
+  const h = hoy(), hr = hora();
+  // Registrar el cierre de turno como movimiento especial
+  run('INSERT INTO bar_movimientos (empleada_id,mesa_id,cerveza_id,marca,cantidad,tipo,precio_unit,fecha,hora) VALUES (?,?,?,?,?,?,?,?,?)',
+    [empleada_id||null, null, null, 'CIERRE_TURNO', totalCerv||0, 'cierre', parseFloat(total)||0, h, hr]);
+  res.json({ ok: true, hora: hr, total, empleada_id });
+});
+
 // ── CAJA ─────────────────────────────────────────────────
 app.post('/api/caja/cerrar', (req,res) => {
   const {totalDia,mesasCob,totalCervG,totalMenu,porEmpleada,porCerveza,porPlato} = req.body;

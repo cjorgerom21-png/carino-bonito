@@ -777,6 +777,26 @@ tr:hover td{background:var(--blue6)}
     <div id="mesa-det-body"></div>
   </div>
 </div>
+<!-- Modal cobro de turno (total o parcial) -->
+<div class="ov" id="ov-cobro-turno">
+  <div class="mod" style="max-width:360px">
+    <div class="mod-t">💰 Cobrar turno</div>
+    <div id="ov-cobro-info" style="background:var(--bg);border:1px solid var(--brd);border-radius:9px;padding:12px;margin-bottom:14px;font-size:13px;line-height:1.8"></div>
+    <div class="fg">
+      <label class="fl">Monto a cobrar (S/)</label>
+      <input class="fi" id="ov-cobro-monto" type="number" min="0" step="0.5" placeholder="0.00" style="font-size:18px;font-weight:700;text-align:center">
+    </div>
+    <div style="display:flex;gap:6px;margin-top:4px">
+      <button class="smbtn ok" style="flex:1;padding:8px" onclick="setCobroTotal()">Total completo</button>
+      <button class="smbtn" style="flex:1;padding:8px;background:var(--sf);color:var(--txt2);border:1px solid var(--brd)" onclick="setCobroParcial(50)">50%</button>
+    </div>
+    <div id="ov-cobro-pendiente" style="margin-top:8px;padding:7px 10px;border-radius:7px;font-size:12px;font-weight:600;display:none"></div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn bd" style="flex:1" onclick="cOv('ov-cobro-turno')">Cancelar</button>
+      <button class="btn bm" style="flex:1" onclick="confirmarCobroTurno()">✓ Confirmar cobro</button>
+    </div>
+  </div>
+</div>
 </main>
 
 <script>
@@ -1094,9 +1114,17 @@ function rBarStats(){
     }).join(''):'<div style="color:var(--txt2);font-size:11px;padding:6px;text-align:center">Sin movimientos</div>';
     // Cobrar btn
     const elBtn=document.getElementById('cbtn-'+e.id);
-    if(elBtn){ elBtn.textContent=e.cobrado?'✓ Cobrado':'💰 Cobrar turno'; }
+    if(elBtn){ 
+      if(e.cobrado){ elBtn.textContent='✓ Cobrado'; elBtn.style.opacity='0.6'; elBtn.style.cursor='default'; }
+      else if(e.pendiente>0){ elBtn.textContent='💵 Cobrar resto'; elBtn.style.opacity='1'; elBtn.style.cursor='pointer'; }
+      else { elBtn.textContent='💰 Cobrar turno'; elBtn.style.opacity='1'; elBtn.style.cursor='pointer'; }
+    }
     const elBadge=document.getElementById('cobrado-badge-'+e.id);
-    if(elBadge) elBadge.innerHTML=e.cobrado?`<div class="cobrado-badge">✓ Turno cobrado a las ${e.horaCobro}</div>`:'';
+    if(elBadge){
+      if(e.cobrado) elBadge.innerHTML=`<div class="cobrado-badge">✓ Turno cobrado a las ${e.horaCobro}</div>`;
+      else if(e.pendiente>0){ const queda=(calcTotalEmp(e)-(e.pendiente||0)); elBadge.innerHTML=`<div class="cobrado-badge" style="background:#FEF3C7;border-color:#FCD34D;color:#92400E">💵 Cobrado S/${e.pendiente.toFixed(2)} · Pendiente S/${queda.toFixed(2)}</div>`; }
+      else elBadge.innerHTML='';
+    }
   });
 
   // Stock
@@ -1356,7 +1384,7 @@ function cargarLS(){
     if(d.menu&&d.menu.length) menu=d.menu;
     if(d.cervezas&&d.cervezas.length) cervezas=d.cervezas.map(c=>({...c,vendidas:c.vendidas||0}));
     if(d.empleadas&&d.empleadas.length){
-      empleadas=d.empleadas.map(e=>({...e,mesas:[],cervezas:0,ventas:0,rb:[],cobrado:false,horaCobro:null}));
+      empleadas=d.empleadas.map(e=>({...e,mesas:[],cervezas:0,ventas:0,rb:[],cobrado:false,horaCobro:null,pendiente:0}));
     }
     mesas=mkMesas(numMesas);
   }catch(e){console.warn('Error cargando config:',e);}
@@ -1549,7 +1577,8 @@ async function cargarDatos() {
           ventas:   (ed.ventas_mesa||0) + (ed.ventas_bar||0),
           rb:       movs,
           cobrado:  false,
-          horaCobro: null
+          horaCobro: null,
+          pendiente: 0
         };
       });
     }
@@ -1778,22 +1807,102 @@ async function bReg(eid, tipo) {
   });
 }
 
-async function cobrarEmpleada(eid) {
+let _cobrandoEid = null;
+
+function cobrarEmpleada(eid) {
   const emp = empleadas.find(e=>e.id===eid);
   if (!emp) return;
-  if (emp.cobrado) { alert(`${emp.nombre} ya fue cobrada a las ${emp.horaCobro}`); return; }
   const total = calcTotalEmp(emp);
-  if (total<=0 && emp.cervezas<=0) { alert(`${emp.nombre} no tiene ventas aún.`); return; }
-  if (!confirm(`Empleada: ${emp.nombre}\nTurno: ${emp.turno} (${emp.entrada}–${emp.salida})\nCervezas: ${emp.cervezas}\nMesas: ${emp.mesas.length}\n\nTOTAL: S/ ${total.toFixed(2)}\n\n¿Confirmar cobro?`)) return;
+  const yaCobrado = emp.pendiente || 0;
+  const restante = total - yaCobrado;
 
-  const r = await api('/bar/cobrar-turno','POST',{empleada_id:eid, total, cervezas:emp.cervezas});
+  document.getElementById('ov-cobro-info').innerHTML = `
+    <div style="display:flex;justify-content:space-between"><span style="color:var(--txt2)">Empleada</span><b>${emp.nombre}</b></div>
+    <div style="display:flex;justify-content:space-between"><span style="color:var(--txt2)">Turno</span><span>${emp.turno} (${emp.entrada}–${emp.salida})</span></div>
+    <div style="display:flex;justify-content:space-between"><span style="color:var(--txt2)">Cervezas</span><span>🍺 ${emp.cervezas}</span></div>
+    ${yaCobrado>0?`<div style="display:flex;justify-content:space-between"><span style="color:var(--txt2)">Ya cobrado</span><span style="color:var(--vrd)">S/ ${yaCobrado.toFixed(2)}</span></div>`:''}
+    <div style="display:flex;justify-content:space-between;border-top:1px solid var(--brd);margin-top:6px;padding-top:6px"><span style="font-weight:700">Pendiente de cobro</span><b style="color:var(--blue2);font-size:16px">S/ ${restante.toFixed(2)}</b></div>
+  `;
+  _cobrandoEid = eid;
+  const montoInput = document.getElementById('ov-cobro-monto');
+  montoInput.value = restante.toFixed(2);
+  montoInput.max = restante.toFixed(2);
+  document.getElementById('ov-cobro-pendiente').style.display = 'none';
+  montoInput.oninput = actualizarPendienteDisplay;
+  aOv('ov-cobro-turno');
+  setTimeout(()=>montoInput.select(), 150);
+}
+
+function setCobroTotal() {
+  const emp = empleadas.find(e=>e.id===_cobrandoEid);
+  if (!emp) return;
+  const restante = calcTotalEmp(emp) - (emp.pendiente||0);
+  document.getElementById('ov-cobro-monto').value = restante.toFixed(2);
+  actualizarPendienteDisplay();
+}
+
+function setCobroParcial(pct) {
+  const emp = empleadas.find(e=>e.id===_cobrandoEid);
+  if (!emp) return;
+  const restante = calcTotalEmp(emp) - (emp.pendiente||0);
+  document.getElementById('ov-cobro-monto').value = (restante * pct / 100).toFixed(2);
+  actualizarPendienteDisplay();
+}
+
+function actualizarPendienteDisplay() {
+  const emp = empleadas.find(e=>e.id===_cobrandoEid);
+  if (!emp) return;
+  const restante = calcTotalEmp(emp) - (emp.pendiente||0);
+  const cobrado = parseFloat(document.getElementById('ov-cobro-monto').value) || 0;
+  const queda = restante - cobrado;
+  const el = document.getElementById('ov-cobro-pendiente');
+  if (queda > 0.01) {
+    el.style.cssText = 'display:block;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;padding:7px 10px;border-radius:7px;font-size:12px;font-weight:600;margin-top:8px';
+    el.innerHTML = `⚠️ Quedará pendiente: <b>S/ ${queda.toFixed(2)}</b> &mdash; puedes cobrar el resto después`;
+  } else if (queda < -0.01) {
+    el.style.cssText = 'display:block;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;padding:7px 10px;border-radius:7px;font-size:12px;font-weight:600;margin-top:8px';
+    el.innerHTML = `⛔ El monto supera lo pendiente (S/ ${restante.toFixed(2)})`;
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+async function confirmarCobroTurno() {
+  const emp = empleadas.find(e=>e.id===_cobrandoEid);
+  if (!emp) return;
+  const total = calcTotalEmp(emp);
+  const yaCobrado = emp.pendiente || 0;
+  const restante = total - yaCobrado;
+  const cobrado = parseFloat(document.getElementById('ov-cobro-monto').value) || 0;
+
+  if (cobrado <= 0) { mostrarToast('⚠️ Ingresa un monto','warn'); return; }
+  if (cobrado > restante + 0.01) { mostrarToast('⚠️ El monto supera lo pendiente','warn'); return; }
+
+  const esCobradoTotal = cobrado >= restante - 0.01;
+
+  const r = await api('/bar/cobrar-turno','POST',{
+    empleada_id: _cobrandoEid, total: cobrado,
+    cervezas: emp.cervezas, parcial: !esCobradoTotal
+  });
   if (!r) { mostrarToast('⚠️ Error al cobrar turno','warn'); return; }
 
-  totalDia += total;
-  historial.unshift({h:r.hora||'--:--',mesa:'Bar',tipo:'cobro',txt:`Cierre turno ${emp.nombre} · ${emp.cervezas} cerv · ${emp.mesas.length} mesas`,monto:total,chica:emp.nombre,icon:'💳'});
-  emp.cobrado = true; emp.horaCobro = r.hora;
+  totalDia += cobrado;
+  emp.pendiente = yaCobrado + cobrado;
+
+  if (esCobradoTotal) {
+    emp.cobrado = true; emp.horaCobro = r.hora;
+    mostrarToast(`✅ Turno de ${emp.nombre} cobrado completo — S/ ${cobrado.toFixed(2)}`);
+  } else {
+    const queda = restante - cobrado;
+    mostrarToast(`💵 Cobrado S/ ${cobrado.toFixed(2)} — Pendiente S/ ${queda.toFixed(2)}`);
+  }
+
+  historial.unshift({h:r.hora||'--:--', mesa:'Bar', tipo:'cobro',
+    txt:`${esCobradoTotal?'Cierre':'Pago parcial'} ${emp.nombre} · S/ ${cobrado.toFixed(2)}${esCobradoTotal?'':' (parcial)'}`,
+    monto:cobrado, chica:emp.nombre, icon: esCobradoTotal?'💳':'💵'});
+
+  cOv('ov-cobro-turno');
   stats(); rBarStats();
-  mostrarToast(`✅ Turno de ${emp.nombre} cobrado — S/ ${total.toFixed(2)}`);
 }
 
 // ── PLATOS → DB ─────────────────────────────────────────

@@ -676,6 +676,17 @@ tr:hover td{background:var(--blue6)}
   </div>
 </section>
 
+<section class="sec" id="sec-cocina">
+  <div style="font-size:15px;font-weight:700;color:var(--blue);margin-bottom:14px">👨‍🍳 Cocina — Órdenes pendientes</div>
+  <div id="cocina-content">
+    <div style="text-align:center;padding:40px;color:var(--txt2)">
+      <div style="font-size:48px;margin-bottom:12px">👨‍🍳</div>
+      <div style="font-size:16px;font-weight:600">Sin órdenes pendientes</div>
+      <div style="font-size:13px;margin-top:6px">Las órdenes aparecen aquí cuando hay mesas con pedidos activos</div>
+      <button onclick="cargarCocina()" style="margin-top:16px;padding:10px 20px;border-radius:8px;background:var(--blue2);color:#fff;border:none;font-size:13px;font-weight:600;cursor:pointer">🔄 Actualizar</button>
+    </div>
+  </div>
+</section>
 <section class="sec" id="sec-analytics">
   <!-- Filtro periodo -->
   <div class="an-top">
@@ -773,15 +784,17 @@ function T(t){
   document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.ntab').forEach(b=>b.classList.remove('active'));
   document.getElementById('sec-'+t).classList.add('active');
-  ['mesas','pedido','bar','empleadas','caja','analytics','config'].forEach((x,i)=>{
+  // Array matches nav order: Mesas,Pedido,BAR,Cocina,Empleadas,Caja,Estadísticas,Config
+  ['mesas','pedido','bar','cocina','empleadas','caja','analytics','config'].forEach((x,i)=>{
     if(x===t) document.querySelectorAll('.ntab')[i].classList.add('active');
   });
-  if(t==='pedido') rPedido();
-  if(t==='bar') rBar();
+  if(t==='pedido')    rPedido();
+  if(t==='bar')       rBar();
   if(t==='empleadas') rEmpleadas();
-  if(t==='caja') rCaja();
-  if(t==='config') rConfig();
+  if(t==='caja')      rCaja();
+  if(t==='config')    rConfig();
   if(t==='analytics') rAnalytics();
+  if(t==='cocina') { if(typeof cargarCocina==='function') cargarCocina(); }
 }
 function aOv(id){document.getElementById(id).classList.add('open');}
 function cOv(id){document.getElementById(id).classList.remove('open');}
@@ -1480,12 +1493,22 @@ async function cargarDatos() {
       cat:    p.categoria,
       precio: parseFloat(p.precio) || 0,
     }));
-    if (mesasApi) {
+    if (mesasApi && mesasApi.length > 0) {
       numMesas = mesasApi.length;
       mesas = mesasApi.map(m=>({
         id:m.id, estado:m.estado,
         chica: m.empleada_nombre||null,
+        empleada_id: m.empleada_id||null,
         pedidos:[], cervezas:{}, totalCerv:m.total_cerv||0, total:m.total||0
+      }));
+    } else {
+      // BD vacía o error — crear 10 mesas por defecto
+      console.warn('Sin mesas en BD, creando...');
+      try { await api('/mesas/cantidad','POST',{cantidad:10}); } catch(e){}
+      numMesas = 10;
+      mesas = Array.from({length:10},(_,i)=>({
+        id:i+1, estado:'libre', chica:null, empleada_id:null,
+        pedidos:[], cervezas:{}, totalCerv:0, total:0
       }));
     }
 
@@ -1498,7 +1521,7 @@ async function cargarDatos() {
     }
 
     // Cargar empleadas con estado real del día
-    if (emps) {
+    if (emps && emps.length > 0) {
       empleadas = emps.map(e => {
         const ed = resumen?.porEmp?.find(x=>x.id===e.id) || {};
         const movs = (resumen?.movimientos||[])
@@ -1522,8 +1545,16 @@ async function cargarDatos() {
     rMesas(); rColGrid(); stats();
     mostrarToast('✅ Datos del día restaurados desde la base de datos','ok');
   } catch(e) {
-    console.error(e);
-    mostrarToast('⚠️ Sin conexión con el servidor','warn');
+    console.error('cargarDatos error:', e);
+    mostrarToast('⚠️ Error conectando — mostrando datos locales','warn');
+    // Mostrar mesas locales aunque falle la API
+    if (!mesas.length) {
+      mesas = Array.from({length:10},(_,i)=>({
+        id:i+1,estado:'libre',chica:null,empleada_id:null,
+        pedidos:[],cervezas:{},totalCerv:0,total:0
+      }));
+    }
+    rMesas(); stats();
   }
 }
 

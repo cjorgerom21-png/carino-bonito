@@ -128,6 +128,14 @@ function crearTablas() {
       cantidad INTEGER DEFAULT 0,
       ingresos REAL DEFAULT 0
     );
+    CREATE TABLE IF NOT EXISTS cobros_turno (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      empleada_id INTEGER,
+      total REAL DEFAULT 0,
+      cervezas INTEGER DEFAULT 0,
+      fecha TEXT,
+      hora TEXT
+    );
   `);
 }
 
@@ -177,6 +185,9 @@ function insertarDatosIniciales() {
 // Inicializar sincrónico (better-sqlite3 es sync)
 crearTablas();
 insertarDatosIniciales();
+
+// Limpiar registros CIERRE_TURNO que quedaron en bar_movimientos (migración)
+try { db.prepare("DELETE FROM bar_movimientos WHERE marca='CIERRE_TURNO' OR tipo='cierre'").run(); } catch(e) {}
 
 console.log(`📦 DB en: ${DB_PATH}`);
 

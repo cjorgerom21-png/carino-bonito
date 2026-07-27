@@ -1,8 +1,9 @@
 const path = require('path');
 const fs   = require('fs');
 
-// Usar volumen de Railway si está disponible, si no usar directorio local
-const DB_DIR  = process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname;
+// Railway monta el volumen en /data — usarlo si existe, si no usar directorio local
+const DB_DIR  = process.env.RAILWAY_VOLUME_MOUNT_PATH ||
+                (fs.existsSync('/data') ? '/data' : __dirname);
 const DB_PATH = path.join(DB_DIR, 'carino_bonito.db');
 
 // Asegurar que el directorio exista

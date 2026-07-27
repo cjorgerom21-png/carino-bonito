@@ -58,21 +58,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 /* PEDIDO */
 .pl{display:grid;grid-template-columns:1fr 1fr 280px;gap:12px;align-items:start}
 @media(max-width:900px){.pl{grid-template-columns:1fr 260px}.col-menu2{display:none}}
-@media(max-width:640px){
-  .pl{grid-template-columns:1fr}.col-cuenta{order:-1}
-  .col-menu2{display:block !important}
-  .pl > div:first-child{display:none}
-  /* En móvil mostramos tabs para navegar entre secciones del pedido */
-}
 /* Tabs de pedido para móvil */
-.ped-tabs{display:none;gap:0;margin-bottom:8px;border-radius:10px;overflow:hidden;border:1px solid var(--brd)}
-.ped-tab{flex:1;padding:9px 4px;font-size:12px;font-weight:700;border:none;cursor:pointer;background:var(--sf);color:var(--txt2);transition:all .15s;text-align:center}
+.ped-tabs{display:none;gap:0;margin-bottom:10px;border-radius:10px;overflow:hidden;border:1.5px solid var(--brd)}
+.ped-tab{flex:1;padding:10px 4px;font-size:12px;font-weight:700;border:none;cursor:pointer;background:var(--sf);color:var(--txt2);transition:all .15s;text-align:center}
 .ped-tab.active{background:var(--blue2);color:#fff}
 @media(max-width:640px){
-  .ped-tabs{display:flex}
-  .pl{display:block}
-  .pl-panel{display:none}
-  .pl-panel.active{display:block}
+  .ped-tabs{display:flex !important}
+  .pl{display:block !important;grid-template-columns:unset !important}
+  .pl-panel{display:none !important}
+  .pl-panel.active{display:block !important}
+  .col-menu2{display:block}
+  .col-cuenta{order:unset}
 }
 .mesa-pills{display:flex;flex-wrap:wrap;gap:5px}
 .mpill{padding:5px 11px;border-radius:99px;font-size:12px;font-weight:500;border:1.5px solid var(--brd);cursor:pointer;background:var(--bg);color:var(--txt2);transition:all .15s}
@@ -590,6 +586,7 @@ tr:hover td{background:var(--blue6)}
         <div class="tr"><span>Total</span><span id="cta-total">S/ 0.00</span></div>
         <button class="btn bm" onclick="confirmarPedido()">✓ Confirmar pedido</button>
         <button class="btn bo" onclick="cobrarMesa()">💰 Cobrar y cerrar</button>
+        <button class="btn" onclick="limpiarPedido()" style="background:var(--sf);border:1px solid var(--brd);color:var(--txt2);width:100%;padding:9px;border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;margin-top:2px">🗑️ Limpiar selección</button>
         <button class="btn bd" onclick="liberarMesa()">✕ Liberar mesa</button>
       </div>
     </div>
@@ -945,6 +942,12 @@ function rPedido(){
         </div></div>`;}).join('')}`).join('');
   document.getElementById('cta-mesa').textContent=mesaSel||'—';
   rCuenta();
+}
+function limpiarPedido(){
+  if(!Object.keys(pedidoActual).length) return;
+  pedidoActual={};
+  rPedido();
+  mostrarToast('🗑️ Selección limpiada');
 }
 function selM(id){mesaSel=id;pedidoActual={};rPedido();}
 function pedTab(tab){
@@ -1486,7 +1489,6 @@ function getHist(){
 // =================== STATS ===================
 function stats(){
   const ocu=mesas.filter(m=>m.estado!=='libre').length;
-  // Pedidos en vivo = mesas ocupadas con total > 0
   const pedVivos=mesas.filter(m=>m.estado!=='libre'&&(m.total||0)>0).length;
   document.getElementById('s-mesas').textContent=ocu+'/'+mesas.length;
   document.getElementById('s-cerv').textContent=totalCervG;
@@ -1495,6 +1497,9 @@ function stats(){
   document.getElementById('s-caja').textContent='S/'+totalDia.toFixed(0);
   document.getElementById('s-emps').textContent=empleadas.length;
   document.getElementById('b-emps').textContent=empleadas.length;
+  // Badge cocina
+  const b=document.getElementById('b-cocina');
+  if(b){if(ocu>0){b.textContent=ocu;b.style.display='';}else b.style.display='none';}
 }
 
 
@@ -2696,16 +2701,7 @@ function marcarListaMesa(mesaId){
   }
 }
 
-// Actualizar badge de cocina cuando cambian mesas
-const _origStats = typeof stats === 'function' ? stats : null;
-function stats(){
-  if(_origStats) _origStats();
-  // Update cocina badge
-  const ocupadas = mesas.filter(m=>m.estado==='ocupada').length;
-  const b=document.getElementById('b-cocina');
-  if(b&&ocupadas>0){b.textContent=ocupadas;b.style.display='';}
-  else if(b) b.style.display='none';
-}
+// Actualizar badge de cocina cuando cambian mesas (fusionado con stats principal)
 
 // Aplicar nombre del negocio al cargar
 function aplicarConfigNegocio(){

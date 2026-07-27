@@ -58,7 +58,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 /* PEDIDO */
 .pl{display:grid;grid-template-columns:1fr 1fr 280px;gap:12px;align-items:start}
 @media(max-width:900px){.pl{grid-template-columns:1fr 260px}.col-menu2{display:none}}
-@media(max-width:640px){.pl{grid-template-columns:1fr}.col-cuenta{order:-1}}
+@media(max-width:640px){
+  .pl{grid-template-columns:1fr}.col-cuenta{order:-1}
+  .col-menu2{display:block !important}
+  .pl > div:first-child{display:none}
+  /* En móvil mostramos tabs para navegar entre secciones del pedido */
+}
+/* Tabs de pedido para móvil */
+.ped-tabs{display:none;gap:0;margin-bottom:8px;border-radius:10px;overflow:hidden;border:1px solid var(--brd)}
+.ped-tab{flex:1;padding:9px 4px;font-size:12px;font-weight:700;border:none;cursor:pointer;background:var(--sf);color:var(--txt2);transition:all .15s;text-align:center}
+.ped-tab.active{background:var(--blue2);color:#fff}
+@media(max-width:640px){
+  .ped-tabs{display:flex}
+  .pl{display:block}
+  .pl-panel{display:none}
+  .pl-panel.active{display:block}
+}
 .mesa-pills{display:flex;flex-wrap:wrap;gap:5px}
 .mpill{padding:5px 11px;border-radius:99px;font-size:12px;font-weight:500;border:1.5px solid var(--brd);cursor:pointer;background:var(--bg);color:var(--txt2);transition:all .15s}
 .mpill:hover{border-color:var(--blue3);color:var(--blue2)}
@@ -553,16 +568,22 @@ tr:hover td{background:var(--blue6)}
 </section>
 
 <section class="sec" id="sec-pedido">
+  <!-- Tabs solo visibles en móvil -->
+  <div class="ped-tabs" id="ped-tabs">
+    <button class="ped-tab active" onclick="pedTab('mesa')">🪑 Mesa</button>
+    <button class="ped-tab" onclick="pedTab('menu')">🍽️ Menú</button>
+    <button class="ped-tab" onclick="pedTab('cuenta')">🧾 Cuenta</button>
+  </div>
   <div class="pl">
-    <div>
+    <div class="pl-panel active" id="pp-mesa">
       <div class="card"><div class="ctitle">🍽️ Mesa activa</div><div class="mesa-pills" id="mesa-sel"></div></div>
       <div class="card"><div class="ctitle">👩 Empleada a cargo</div><div class="chica-grid" id="chica-sel"></div></div>
       <div class="card"><div class="ctitle">🍺 Cervezas</div><div class="cg" id="cerv-grid"></div></div>
     </div>
-    <div class="col-menu2">
+    <div class="col-menu2 pl-panel" id="pp-menu">
       <div class="card"><div class="ctitle">🍽️ Menú</div><div id="menu-list"></div></div>
     </div>
-    <div class="col-cuenta">
+    <div class="col-cuenta pl-panel" id="pp-cuenta">
       <div class="cta">
         <div class="ctitle">🧾 Cuenta — Mesa <span id="cta-mesa" style="color:var(--accent)">—</span></div>
         <div id="cta-items"><div class="es">Sin pedidos</div></div>
@@ -574,6 +595,7 @@ tr:hover td{background:var(--blue6)}
     </div>
   </div>
 </section>
+
 
 <section class="sec" id="sec-bar">
   <div class="row">
@@ -925,6 +947,17 @@ function rPedido(){
   rCuenta();
 }
 function selM(id){mesaSel=id;pedidoActual={};rPedido();}
+function pedTab(tab){
+  // Solo actúa en móvil (tabs visibles)
+  const tabs=document.querySelectorAll('.ped-tab');
+  const panels={mesa:'pp-mesa',menu:'pp-menu',cuenta:'pp-cuenta'};
+  tabs.forEach(t=>t.classList.remove('active'));
+  Object.values(panels).forEach(p=>{const el=document.getElementById(p);if(el)el.classList.remove('active');});
+  const idx={mesa:0,menu:1,cuenta:2}[tab]??0;
+  if(tabs[idx]) tabs[idx].classList.add('active');
+  const el=document.getElementById(panels[tab]);
+  if(el) el.classList.add('active');
+}
 function asigE(n){if(!mesaSel)return;mesas.find(m=>m.id===mesaSel).chica=n;rPedido();}
 function menuClick(btn){
   // Lee datos desde atributos — no hay riesgo de caracteres especiales
@@ -1513,10 +1546,10 @@ async function cargarDatos() {
 
     // Restaurar contadores del día desde DB
     if (resumen) {
-      totalDia   = resumen.totalDia   || 0;
-      mesasCob   = resumen.mesasCob   || 0;
-      totalCervG = resumen.totalCervG || 0;
-      totalMenu  = resumen.totalMenu  || 0;
+      totalDia   = parseFloat(resumen.totalDia)   || 0;
+      mesasCob   = parseInt(resumen.mesasCob)      || 0;
+      totalCervG = parseInt(resumen.totalCervG)    || 0;
+      totalMenu  = parseFloat(resumen.totalMenu)   || 0;
     }
 
     // Cargar empleadas con estado real del día

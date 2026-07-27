@@ -1673,28 +1673,45 @@ async function bReg(eid, tipo) {
   if(tipo==='salio' && precioReal<=0){
     mostrarToast('⚠️ '+c.nombre+' no tiene precio configurado','warn');
   }
-  const r = await api('/bar/movimientos','POST',{
+
+  // ── Actualización optimista: UI responde INMEDIATAMENTE ──
+  const hora = new Date().toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
+  if (tipo==='salio') {
+    emp.cervezas += qty; c.vendidas=(c.vendidas||0)+qty; totalCervG+=qty;
+    emp.rb.unshift({h:hora, marca:c.nombre, qty, tipo:'manual', mesa:null});
+    historial.unshift({h:hora,mesa:'Bar',tipo:'bar',txt:`${emp.nombre} → ${qty}× ${c.nombre}`,monto:qty*precioReal,chica:emp.nombre,icon:'🍺'});
+    mostrarToast(`✅ ${qty}× ${c.nombre} → ${emp.nombre}`);
+  } else {
+    emp.cervezas = Math.max(0,emp.cervezas-qty);
+    c.vendidas   = Math.max(0,(c.vendidas||0)-qty);
+    totalCervG   = Math.max(0,totalCervG-qty);
+    emp.rb.unshift({h:hora, marca:c.nombre, qty, tipo:'devol', mesa:null});
+    mostrarToast(`↩ Devol. ${qty}× ${c.nombre}`);
+  }
+  stats(); rBar();
+
+  // ── Guardar en servidor en background (no bloquea la UI) ──
+  api('/bar/movimientos','POST',{
     empleada_id: eid,
     cerveza_id: c.id,
     marca: c.nombre,
     cantidad: qty,
     tipo: tipo,
     precio_unit: precioReal
+  }).then(r => {
+    if (!r) {
+      // Revertir si falla el servidor
+      mostrarToast('⚠️ Error guardando — reintentando...','warn');
+      if (tipo==='salio') {
+        emp.cervezas -= qty; c.vendidas=Math.max(0,(c.vendidas||0)-qty); totalCervG=Math.max(0,totalCervG-qty);
+        emp.rb.shift(); historial.shift();
+      } else {
+        emp.cervezas += qty; c.vendidas=(c.vendidas||0)+qty; totalCervG+=qty;
+        emp.rb.shift();
+      }
+      stats(); rBar();
+    }
   });
-  if (!r) { mostrarToast('⚠️ Error en movimiento bar','warn'); return; }
-
-  const hora = new Date().toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
-  if (tipo==='salio') {
-    emp.cervezas += qty; c.vendidas=(c.vendidas||0)+qty; totalCervG+=qty;
-    emp.rb.unshift({h:hora, marca:c.nombre, qty, tipo:'manual', mesa:null});
-    historial.unshift({h:hora,mesa:'Bar',tipo:'bar',txt:`${emp.nombre} → ${qty}× ${c.nombre}`,monto:qty*precioReal,chica:emp.nombre,icon:'🍺'});
-  } else {
-    emp.cervezas = Math.max(0,emp.cervezas-qty);
-    c.vendidas   = Math.max(0,(c.vendidas||0)-qty);
-    totalCervG   = Math.max(0,totalCervG-qty);
-    emp.rb.unshift({h:hora, marca:c.nombre, qty, tipo:'devol', mesa:null});
-  }
-  stats(); rBar();
 }
 
 async function cobrarEmpleada(eid) {

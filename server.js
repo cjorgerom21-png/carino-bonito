@@ -10,8 +10,15 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-function hoy()  { return new Date().toISOString().split('T')[0]; }
-function hora() { return new Date().toTimeString().slice(0,5); }
+function hoy(req)  {
+  if (req?.body?.fecha_local) return req.body.fecha_local;
+  // Fallback: intentar TZ de Perú
+  return new Date().toLocaleDateString('en-CA', {timeZone: process.env.TZ || 'America/Lima'});
+}
+function hora(req) {
+  if (req?.body?.hora_local) return req.body.hora_local;
+  return new Date().toLocaleTimeString('es', {hour:'2-digit', minute:'2-digit', timeZone: process.env.TZ || 'America/Lima'});
+}
 
 // ── STATUS / DIAGNÓSTICO ─────────────────────────────────
 app.get('/api/status', (_,res) => {
@@ -133,7 +140,7 @@ app.post('/api/pedidos', (req,res) => {
   const {mesa_id,empleada_id,items} = req.body;
   items.forEach(i=>{ i.precio_unit=parseFloat(i.precio_unit)||0; i.subtotal=i.precio_unit*(parseInt(i.cantidad)||1); });
   const total = items.reduce((s,i)=>s+(i.subtotal||0),0);
-  const h=hoy(), hr=hora();
+  const h=hoy(req), hr=hora(req);
   const pedido_id = insert('INSERT INTO pedidos (mesa_id,empleada_id,fecha,hora,total) VALUES (?,?,?,?,?)',[mesa_id,empleada_id||null,h,hr,total]);
   items.forEach(item => {
     run('INSERT INTO pedido_items (pedido_id,tipo,nombre,marca,cantidad,precio_unit,subtotal) VALUES (?,?,?,?,?,?,?)',
@@ -151,7 +158,7 @@ app.post('/api/pedidos', (req,res) => {
 
 app.post('/api/pedidos/cobrar-mesa', (req,res) => {
   const {mesa_id} = req.body;
-  const h=hoy();
+  const h=hoy(req);
   const peds = all('SELECT total FROM pedidos WHERE mesa_id=? AND fecha=? AND cobrado=0',[mesa_id,h]);
   const totalMesa = peds.reduce((s,p)=>s+(p.total||0),0);
   run('UPDATE pedidos SET cobrado=1 WHERE mesa_id=? AND fecha=? AND cobrado=0',[mesa_id,h]);
@@ -161,13 +168,13 @@ app.post('/api/pedidos/cobrar-mesa', (req,res) => {
 
 // ── BAR ──────────────────────────────────────────────────
 app.get('/api/bar/movimientos', (_,res) => {
-  const h=hoy();
+  const h=hoy(req);
   res.json(all("SELECT bm.*, e.nombre as emp_nombre, e.color as emp_color FROM bar_movimientos bm LEFT JOIN empleadas e ON e.id=bm.empleada_id WHERE bm.fecha=? AND bm.tipo!='cierre' ORDER BY bm.id DESC LIMIT 100",[h]));
 });
 
 app.post('/api/bar/movimientos', (req,res) => {
   const {empleada_id,mesa_id,cerveza_id,marca,cantidad,tipo,precio_unit} = req.body;
-  const h=hoy(), hr=hora();
+  const h=hoy(req), hr=hora(req);
   run('INSERT INTO bar_movimientos (empleada_id,mesa_id,cerveza_id,marca,cantidad,tipo,precio_unit,fecha,hora) VALUES (?,?,?,?,?,?,?,?,?)',
     [empleada_id||null,mesa_id||null,cerveza_id||null,marca,cantidad,tipo,precio_unit||0,h,hr]);
   if (tipo==='venta' || tipo==='salio') {
@@ -181,7 +188,7 @@ app.post('/api/bar/movimientos', (req,res) => {
 // ── COBRO DE TURNO EMPLEADA ──────────────────────────────
 app.post('/api/bar/cobrar-turno', (req, res) => {
   const { empleada_id, total, cervezas: totalCerv } = req.body;
-  const h = hoy(), hr = hora();
+  const h = hoy(req), hr = hora(req);
   // Guardar en tabla de cobros de turno (separada del registro bar)
   run(`CREATE TABLE IF NOT EXISTS cobros_turno (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -266,6 +273,37 @@ app.get('/api/dia/resumen', (req, res) => {
     movimientos,
     mesasOcupadas: mesasOcupadas.map(m=>m.mesa_id)
   });
+});
+
+// ── ELIMINAR PEDIDO (para pruebas) ───────────────────────
+app.delete('/api/pedidos/:id', (req, res) => {
+  const pedido = get('SELECT * FROM pedidos WHERE id=?', [req.params.id]);
+  if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
+  // Revertir stock de cervezas
+  const items = all('SELECT * FROM pedido_items WHERE pedido_id=?', [req.params.id]);
+  items.forEach(it => {
+    if (it.tipo === 'cerveza') run('UPDATE cervezas SET stock=stock+? WHERE nombre=?', [it.cantidad, it.marca]);
+  });
+  run('DELETE FROM pedido_items WHERE pedido_id=?', [req.params.id]);
+  run('DELETE FROM pedidos WHERE id=?', [req.params.id]);
+  // Si no quedan pedidos en la mesa, liberarla
+  const resto = get('SELECT COUNT(*) as n FROM pedidos WHERE mesa_id=? AND cobrado=0 AND fecha=?', [pedido.mesa_id, hoy()]);
+  if ((resto?.n || 0) === 0) run("UPDATE mesas SET estado='libre', empleada_id=NULL WHERE id=?", [pedido.mesa_id]);
+  res.json({ ok: true, total_restado: pedido.total, mesa_id: pedido.mesa_id });
+});
+
+// ── PEDIDOS DE UNA MESA (lista completa) ─────────────────
+app.get('/api/mesas/:id/pedidos', (req, res) => {
+  const h = hoy();
+  const pedidos = all(`
+    SELECT p.*, e.nombre as emp_nombre
+    FROM pedidos p LEFT JOIN empleadas e ON e.id=p.empleada_id
+    WHERE p.mesa_id=? AND p.fecha=? ORDER BY p.id DESC
+  `, [req.params.id, h]);
+  pedidos.forEach(p => {
+    p.items = all('SELECT * FROM pedido_items WHERE pedido_id=?', [p.id]);
+  });
+  res.json(pedidos);
 });
 
 // ── DETALLE DE MESA ──────────────────────────────────────

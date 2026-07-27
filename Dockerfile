@@ -1,5 +1,8 @@
 FROM node:20-slim
 
+# Zona horaria Perú
+ENV TZ=America/Lima
+
 # Instalar dependencias nativas para better-sqlite3
 RUN apt-get update && apt-get install -y \
     python3 \

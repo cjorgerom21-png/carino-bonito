@@ -157,7 +157,7 @@ app.post('/api/bar/movimientos', (req,res) => {
   const h=hoy(), hr=hora();
   run('INSERT INTO bar_movimientos (empleada_id,mesa_id,cerveza_id,marca,cantidad,tipo,precio_unit,fecha,hora) VALUES (?,?,?,?,?,?,?,?,?)',
     [empleada_id||null,mesa_id||null,cerveza_id||null,marca,cantidad,tipo,precio_unit||0,h,hr]);
-  if (tipo==='venta') {
+  if (tipo==='venta' || tipo==='salio') {
     run('UPDATE cervezas SET stock=MAX(0,stock-?) WHERE id=?',[cantidad,cerveza_id]);
   } else if (tipo==='devol') {
     run('UPDATE cervezas SET stock=stock+? WHERE id=?',[cantidad,cerveza_id]);
@@ -225,7 +225,7 @@ app.get('/api/dia/resumen', (req, res) => {
   // Sumar cobros de turno del bar al totalDia
   run(`CREATE TABLE IF NOT EXISTS cobros_turno (id INTEGER PRIMARY KEY AUTOINCREMENT, empleada_id INTEGER, total REAL DEFAULT 0, cervezas INTEGER DEFAULT 0, fecha TEXT, hora TEXT)`);
   const cobrosBar  = get(`SELECT COALESCE(SUM(total),0) as t FROM cobros_turno WHERE fecha=?`, [h]);
-  const cervsDia   = get(`SELECT COALESCE(SUM(cantidad),0) as t FROM bar_movimientos WHERE fecha=? AND tipo NOT IN ('devol','cierre')`, [h]);
+  const cervsDia   = get(`SELECT COALESCE(SUM(cantidad),0) as t FROM bar_movimientos WHERE fecha=? AND tipo NOT IN ('devol','cierre') AND tipo IN ('venta','salio','manual')`, [h]);
   const cervsDevol = get(`SELECT COALESCE(SUM(cantidad),0) as t FROM bar_movimientos WHERE fecha=? AND tipo='devol'`, [h]);
   const menuDia    = get(`SELECT COALESCE(SUM(pi.subtotal),0) as t FROM pedido_items pi JOIN pedidos p ON p.id=pi.pedido_id WHERE p.fecha=? AND pi.tipo!='cerveza' AND p.cobrado=1`, [h]);
   const porEmp = all(`

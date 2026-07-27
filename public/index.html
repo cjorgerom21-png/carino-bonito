@@ -522,7 +522,8 @@ tr:hover td{background:var(--blue6)}
   <div class="hstats">
     <div class="hs"><div class="hs-n" id="s-mesas">0/10</div><div class="hs-l">Mesas</div></div>
     <div class="hs"><div class="hs-n" id="s-cerv">0</div><div class="hs-l">🍺</div></div>
-    <div class="hs"><div class="hs-n" id="s-caja">S/0</div><div class="hs-l">Caja</div></div>
+    <div class="hs"><div class="hs-n" id="s-ped" style="color:#34D399">0</div><div class="hs-l">Pedidos</div></div>
+    <div class="hs"><div class="hs-n" id="s-caja" style="color:#FBBF24">S/0</div><div class="hs-l">Caja</div></div>
     <div class="hs"><div class="hs-n" id="s-emps">0</div><div class="hs-l">Mozas</div></div>
   </div>
 </header>
@@ -1452,9 +1453,13 @@ function getHist(){
 // =================== STATS ===================
 function stats(){
   const ocu=mesas.filter(m=>m.estado!=='libre').length;
+  // Pedidos en vivo = mesas ocupadas con total > 0
+  const pedVivos=mesas.filter(m=>m.estado!=='libre'&&(m.total||0)>0).length;
   document.getElementById('s-mesas').textContent=ocu+'/'+mesas.length;
   document.getElementById('s-cerv').textContent=totalCervG;
-  document.getElementById('s-caja').textContent='S/'+Math.round(totalDia);
+  const elPed=document.getElementById('s-ped');
+  if(elPed){ elPed.textContent=pedVivos; elPed.style.color=pedVivos>0?'#34D399':'rgba(255,255,255,.7)'; }
+  document.getElementById('s-caja').textContent='S/'+totalDia.toFixed(0);
   document.getElementById('s-emps').textContent=empleadas.length;
   document.getElementById('b-emps').textContent=empleadas.length;
 }
@@ -2684,6 +2689,26 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelect
 rColGrid();
 cargarDatos();
 aplicarConfigNegocio();
+
+// Recargar datos cuando el usuario vuelve a la pestaña (evita pérdida de datos)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    cargarDatos();
+  }
+});
+
+// Sync silencioso cada 60 segundos (mantiene stats en vivo)
+setInterval(async () => {
+  try {
+    const resumen = await api('/dia/resumen');
+    if (resumen) {
+      totalDia   = resumen.totalDia   || totalDia;
+      mesasCob   = resumen.mesasCob   || mesasCob;
+      totalCervG = resumen.totalCervG || totalCervG;
+      stats();
+    }
+  } catch(e) {}
+}, 60000);
 </script>
 </body>
 </html>

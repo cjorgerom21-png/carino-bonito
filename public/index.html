@@ -777,6 +777,16 @@ tr:hover td{background:var(--blue6)}
     <div id="mesa-det-body"></div>
   </div>
 </div>
+<!-- Modal registro pedidos por mesa -->
+<div class="ov" id="ov-pedidos-mesa">
+  <div class="mod" style="max-width:520px">
+    <div class="mod-t" id="ov-pm-title">📋 Pedidos — Mesa</div>
+    <div id="ov-pm-body" style="max-height:420px;overflow-y:auto"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:12px">
+      <button class="btn bd" onclick="cOv('ov-pedidos-mesa')">Cerrar</button>
+    </div>
+  </div>
+</div>
 <!-- Modal cobro de turno (total o parcial) -->
 <div class="ov" id="ov-cobro-turno">
   <div class="mod" style="max-width:360px">
@@ -849,7 +859,7 @@ function rMesas(){
       ${emp?`<div class="mm">👩 <strong>${emp.nombre}</strong></div>`:''}
       ${m.totalCerv>0?`<div class="cc">🍺 ${m.totalCerv}</div>`:''}
       ${m.total>0?`<div class="mm" style="margin-top:4px">💰 <strong>S/${m.total.toFixed(2)}</strong></div>`:''}
-      ${m.estado==='ocupada'?`<div style="font-size:10px;color:var(--blue3);margin-top:4px">👆 Ver detalle</div>`:''}
+      ${m.estado==='ocupada'?`<div style="font-size:10px;color:var(--blue3);margin-top:4px">👆 Ver detalle</div><div onclick="verPedidosMesa(${m.id},event)" style="font-size:10px;color:var(--txt2);margin-top:2px;text-decoration:underline;cursor:pointer">📋 Ver pedidos</div>`:''}
     </div>`;
   }).join('');
   const lib=mesas.filter(m=>m.estado==='libre').length;
@@ -858,6 +868,57 @@ function rMesas(){
   stats();
 }
 function irP(id){mesaSel=id;pedidoActual={};T('pedido');}
+
+async function verPedidosMesa(mesaId, e) {
+  if(e) e.stopPropagation();
+  document.getElementById('ov-pm-title').textContent = '📋 Pedidos — Mesa ' + mesaId;
+  document.getElementById('ov-pm-body').innerHTML = '<div style="text-align:center;padding:20px;color:var(--txt2)">Cargando...</div>';
+  aOv('ov-pedidos-mesa');
+  const pedidos = await api('/mesas/'+mesaId+'/pedidos');
+  if (!pedidos) { document.getElementById('ov-pm-body').innerHTML='<div style="color:red;padding:12px">Error cargando pedidos</div>'; return; }
+  if (!pedidos.length) { document.getElementById('ov-pm-body').innerHTML='<div style="text-align:center;padding:20px;color:var(--txt2)">Sin pedidos registrados</div>'; return; }
+  document.getElementById('ov-pm-body').innerHTML = pedidos.map(p=>`
+    <div id="ped-row-${p.id}" style="border:1px solid var(--brd);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--sf)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;color:var(--txt2)">${p.hora||'--:--'}</span>
+          ${p.emp_nombre?`<span style="background:var(--blue5);border-radius:99px;padding:1px 8px;font-size:11px;font-weight:600;color:var(--blue)">👩 ${p.emp_nombre}</span>`:''}
+          <span style="font-size:12px;font-weight:700;color:${p.cobrado?'var(--vrd)':'var(--blue)'}">${p.cobrado?'✓ Cobrado':'Pendiente'}</span>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-size:15px;font-weight:800;color:var(--blue)">S/ ${(p.total||0).toFixed(2)}</span>
+          ${!p.cobrado?`<button onclick="eliminarPedido(${p.id},${mesaId})" style="background:#FEE2E2;border:1px solid #FCA5A5;color:#991B1B;border-radius:7px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer">🗑️ Eliminar</button>`:''}
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--txt2)">
+        ${(p.items||[]).map(it=>`<span style="margin-right:10px">${it.nombre} ×${it.cantidad}</span>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+async function eliminarPedido(pedidoId, mesaId) {
+  if (!confirm('¿Eliminar este pedido? El monto se restará del total de la mesa.')) return;
+  const r = await api('/pedidos/'+pedidoId, 'DELETE');
+  if (!r) { mostrarToast('⚠️ Error al eliminar pedido','warn'); return; }
+  // Restar del total local
+  totalDia = Math.max(0, totalDia - (r.total_restado||0));
+  // Actualizar mesa local
+  const mesa = mesas.find(m=>m.id===mesaId);
+  if (mesa) {
+    mesa.total = Math.max(0, (mesa.total||0) - (r.total_restado||0));
+    if (mesa.total <= 0) mesa.estado = 'libre';
+  }
+  // Quitar fila del modal
+  const row = document.getElementById('ped-row-'+pedidoId);
+  if (row) row.remove();
+  // Si no quedan filas
+  const body = document.getElementById('ov-pm-body');
+  if (body && !body.querySelector('[id^="ped-row-"]')) {
+    body.innerHTML='<div style="text-align:center;padding:20px;color:var(--txt2)">Sin pedidos registrados</div>';
+  }
+  stats(); rMesas();
+  mostrarToast(`🗑️ Pedido eliminado · S/ ${(r.total_restado||0).toFixed(2)} restado de caja`);
+}
 
 async function verMesa(id){
   const r = await api('/mesas/'+id+'/detalle');
@@ -1075,16 +1136,16 @@ function rBarCards(){
 function rBarStats(){
   // Header stats
   document.getElementById('bar-big').textContent=totalCervG;
-  const sorted=[...empleadas].sort((a,b)=>b.cervezas-a.cervezas);
+  // Ranking en tiempo real desde datos locales (sin esperar servidor)
+  const sorted=[...empleadas].sort((a,b)=>(b.cervezas-a.cervezas)||((calcTotalEmp(b))-(calcTotalEmp(a))));
   const medals=['🥇','🥈','🥉'];
-  document.getElementById('ranking-list').innerHTML=sorted.length?
-    sorted.slice(0,4).map((e,i)=>`
-      <div class="rank-row">
-        <span class="rank-pos">${medals[i]||'·'}</span>
-        <div class="rank-av" style="background:${e.color};color:#1e3a5f">${e.nombre[0]}</div>
-        <span class="rank-name">${e.nombre}</span>
-        <span class="rank-count">🍺 ${e.cervezas}</span>
-      </div>`).join(''):'<div style="opacity:.7;font-size:12px">Sin datos aún</div>';
+  document.getElementById('ranking-list').innerHTML=sorted.filter(e=>e.cervezas>0||calcTotalEmp(e)>0).slice(0,4).map((e,i)=>`
+    <div class="rank-row">
+      <span class="rank-pos">${medals[i]||'·'}</span>
+      <div class="rank-av" style="background:${e.color};color:#1e3a5f">${e.nombre[0]}</div>
+      <span class="rank-name">${e.nombre}</span>
+      <span class="rank-count">🍺${e.cervezas} · S/${calcTotalEmp(e).toFixed(0)}</span>
+    </div>`).join('') || '<div style="opacity:.7;font-size:12px">Sin datos aún</div>';
 
   // Actualizar solo los números de cada tarjeta (sin destruir el DOM)
   empleadas.forEach(e=>{
@@ -1506,6 +1567,10 @@ function stats(){
 }
 
 
+
+function fechaLocal() { return new Date().toLocaleDateString('en-CA'); } // YYYY-MM-DD
+function horaLocal()  { return new Date().toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'}); }
+function tsLocal()    { return {fecha_local: fechaLocal(), hora_local: horaLocal()}; }
 // =================== API — CONEXIÓN CON BASE DE DATOS ===================
 const API = '/api';
 
@@ -1647,6 +1712,7 @@ async function confirmarPedido() {
   });
 
   const r = await api('/pedidos','POST',{
+    ...tsLocal(),
     mesa_id: mesaSel,
     empleada_id: emp?.id||null,
     items
@@ -1777,6 +1843,7 @@ async function bReg(eid, tipo) {
 
   // ── Guardar en servidor en background ──
   api('/bar/movimientos','POST',{
+    ...tsLocal(),
     empleada_id: eid,
     cerveza_id: c.id,
     marca: c.nombre,
@@ -1881,6 +1948,7 @@ async function confirmarCobroTurno() {
   const esCobradoTotal = cobrado >= restante - 0.01;
 
   const r = await api('/bar/cobrar-turno','POST',{
+    ...tsLocal(),
     empleada_id: _cobrandoEid, total: cobrado,
     cervezas: emp.cervezas, parcial: !esCobradoTotal
   });

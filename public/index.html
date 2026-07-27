@@ -1661,32 +1661,59 @@ async function liberarMesa() {
 async function bReg(eid, tipo) {
   const emp = empleadas.find(e=>e.id===eid);
   if (!emp) return;
-  const st  = barSt[eid]||{cid:cervezas[0]?.id, qty:1};
+  const st  = barSt[eid]||{cid:String(cervezas[0]?.id||0), qty:1};
   const c   = cervezas.find(x=>String(x.id)===String(st.cid))||cervezas[0];
-  const qty = st.qty||1;
-
+  if (!c) { mostrarToast('⚠️ Selecciona una cerveza','warn'); return; }
+  const qty = parseInt(st.qty)||1;
   const precioReal = parseFloat(c.precio)||0;
+
   if(tipo==='salio' && precioReal<=0){
     mostrarToast('⚠️ '+c.nombre+' no tiene precio configurado','warn');
   }
 
   // ── Actualización optimista: UI responde INMEDIATAMENTE ──
-  const hora = new Date().toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
+  const horaStr = new Date().toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
   if (tipo==='salio') {
-    emp.cervezas += qty; c.vendidas=(c.vendidas||0)+qty; totalCervG+=qty;
-    emp.rb.unshift({h:hora, marca:c.nombre, qty, tipo:'manual', mesa:null});
-    historial.unshift({h:hora,mesa:'Bar',tipo:'bar',txt:`${emp.nombre} → ${qty}× ${c.nombre}`,monto:qty*precioReal,chica:emp.nombre,icon:'🍺'});
+    emp.cervezas += qty;
+    c.vendidas = (c.vendidas||0) + qty;
+    totalCervG += qty;
+    emp.rb.unshift({h:horaStr, marca:c.nombre, qty, tipo:'manual', mesa:null});
+    historial.unshift({h:horaStr,mesa:'Bar',tipo:'bar',txt:`${emp.nombre} → ${qty}× ${c.nombre}`,monto:qty*precioReal,chica:emp.nombre,icon:'🍺'});
     mostrarToast(`✅ ${qty}× ${c.nombre} → ${emp.nombre}`);
   } else {
-    emp.cervezas = Math.max(0,emp.cervezas-qty);
-    c.vendidas   = Math.max(0,(c.vendidas||0)-qty);
-    totalCervG   = Math.max(0,totalCervG-qty);
-    emp.rb.unshift({h:hora, marca:c.nombre, qty, tipo:'devol', mesa:null});
+    emp.cervezas = Math.max(0, emp.cervezas - qty);
+    c.vendidas   = Math.max(0, (c.vendidas||0) - qty);
+    totalCervG   = Math.max(0, totalCervG - qty);
+    emp.rb.unshift({h:horaStr, marca:c.nombre, qty, tipo:'devol', mesa:null});
     mostrarToast(`↩ Devol. ${qty}× ${c.nombre}`);
   }
-  stats(); rBar();
 
-  // ── Guardar en servidor en background (no bloquea la UI) ──
+  // Actualizar DOM directamente (sin rebuilding completo)
+  const elCerv = document.getElementById('bcerv-'+eid);
+  if(elCerv) elCerv.textContent = emp.cervezas;
+  const elMonto = document.getElementById('cmonto-'+eid);
+  if(elMonto) elMonto.textContent = 'S/ '+calcTotalEmp(emp).toFixed(2);
+  const elDet = document.getElementById('cdetalle-'+eid);
+  if(elDet) elDet.textContent = calcDetalleEmp(emp);
+  const elPrec = document.getElementById('cprec-'+eid);
+  if(elPrec) elPrec.innerHTML = calcPrecuentaLineas(emp);
+  const elReg = document.getElementById('breg-'+eid);
+  if(elReg) elReg.innerHTML = emp.rb.length ? emp.rb.slice(0,8).map(r=>{
+    const esDevol = r.tipo==='devol';
+    const sufijo = esDevol?' (devol)':r.mesa?' M'+r.mesa:'';
+    return `<div class="breg-row">
+      <span class="breg-h">${r.h}</span>
+      <span class="breg-t">${r.marca}${sufijo}</span>
+      <span class="breg-q ${esDevol?'neg':'pos'}">${esDevol?'−':'+'}${r.qty}</span>
+    </div>`;
+  }).join('') : '<div style="color:var(--txt2);font-size:11px;padding:6px;text-align:center">Sin movimientos</div>';
+
+  // Actualizar ranking y stats globales
+  const elBigCerv = document.getElementById('bar-big');
+  if(elBigCerv) elBigCerv.textContent = totalCervG;
+  stats();
+
+  // ── Guardar en servidor en background ──
   api('/bar/movimientos','POST',{
     empleada_id: eid,
     cerveza_id: c.id,
@@ -1696,8 +1723,8 @@ async function bReg(eid, tipo) {
     precio_unit: precioReal
   }).then(r => {
     if (!r) {
-      // Revertir si falla el servidor
-      mostrarToast('⚠️ Error guardando — reintentando...','warn');
+      mostrarToast('⚠️ Error guardando movimiento','warn');
+      // Revertir
       if (tipo==='salio') {
         emp.cervezas -= qty; c.vendidas=Math.max(0,(c.vendidas||0)-qty); totalCervG=Math.max(0,totalCervG-qty);
         emp.rb.shift(); historial.shift();
@@ -1705,7 +1732,15 @@ async function bReg(eid, tipo) {
         emp.cervezas += qty; c.vendidas=(c.vendidas||0)+qty; totalCervG+=qty;
         emp.rb.shift();
       }
-      stats(); rBar();
+      // Re-actualizar DOM tras revertir
+      if(elCerv) elCerv.textContent = emp.cervezas;
+      if(elMonto) elMonto.textContent = 'S/ '+calcTotalEmp(emp).toFixed(2);
+      if(elPrec) elPrec.innerHTML = calcPrecuentaLineas(emp);
+      if(elReg) elReg.innerHTML = emp.rb.length ? emp.rb.slice(0,8).map(r=>{
+        const esDevol=r.tipo==='devol';
+        return `<div class="breg-row"><span class="breg-h">${r.h}</span><span class="breg-t">${r.marca}${esDevol?' (devol)':r.mesa?' M'+r.mesa:''}</span><span class="breg-q ${esDevol?'neg':'pos'}">${esDevol?'−':'+'}${r.qty}</span></div>`;
+      }).join('') : '<div style="color:var(--txt2);font-size:11px;padding:6px;text-align:center">Sin movimientos</div>';
+      stats();
     }
   });
 }

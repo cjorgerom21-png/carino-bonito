@@ -963,6 +963,7 @@ async function verMesa(id){
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
       <button onclick="irP(${id});cOv('ov-mesa-det')" style="flex:1;padding:10px;border-radius:9px;background:var(--blue2);color:#fff;border:none;font-size:13px;font-weight:600;cursor:pointer">✏️ Agregar pedido</button>
       <button onclick="mesaSel=${id};cobrarMesa();cOv('ov-mesa-det')" style="flex:1;padding:10px;border-radius:9px;background:transparent;color:var(--vrd);border:1.5px solid var(--vrd);font-size:13px;font-weight:600;cursor:pointer">💰 Cobrar mesa</button>
+      <button onclick="cOv('ov-mesa-det');verPedidosMesa(${id},null)" style="width:100%;padding:9px;border-radius:9px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;font-size:13px;font-weight:600;cursor:pointer">🗑️ Cancelar / eliminar pedidos</button>
     </div>`;
   aOv('ov-mesa-det');
 }
@@ -1004,6 +1005,30 @@ function rPedido(){
   document.getElementById('cta-mesa').textContent=mesaSel||'—';
   rCuenta();
 }
+function nuevoTurno(eid) {
+  const emp = empleadas.find(e=>e.id===eid);
+  if (!emp) return;
+  if (!confirm(`¿Iniciar nuevo turno para ${emp.nombre}?\nSe limpiarán los registros del turno anterior.`)) return;
+  // Guardar resumen del turno cerrado en historial antes de limpiar
+  historial.unshift({
+    h: horaLocal(), mesa:'Bar', tipo:'turno',
+    txt:`Nuevo turno iniciado — ${emp.nombre} (anterior: S/${(emp.pendiente||0).toFixed(2)} · 🍺${emp.cervezas})`,
+    monto:0, chica:emp.nombre, icon:'🔄'
+  });
+  // Resetear estado de la empleada
+  emp.cervezas  = 0;
+  emp.ventas    = 0;
+  emp.rb        = [];
+  emp.mesas     = [];
+  emp.cobrado   = false;
+  emp.horaCobro = null;
+  emp.pendiente = 0;
+  delete barSt[eid];
+  rBar();
+  stats();
+  mostrarToast(`🔄 Nuevo turno iniciado para ${emp.nombre}`);
+}
+
 function limpiarPedido(){
   if(!Object.keys(pedidoActual).length) return;
   pedidoActual={};
@@ -1083,6 +1108,35 @@ function rBar(){
 function rBarCards(){
   document.getElementById('bar-grid').innerHTML=empleadas.map(e=>{
     const st=barSt[e.id]||{cid:String(cervezas[0]?.id||0),qty:1};
+    const totalTurno = e.pendiente||0; // lo que se cobró
+
+    // ── TARJETA TURNO CERRADO ──
+    if(e.cobrado) return `<div class="bar-card" style="border:2px solid #86EFAC">
+      <div class="bar-hdr" style="background:linear-gradient(135deg,#064e3b,#059669)">
+        <div class="bar-av" style="background:${e.color};color:#1e3a5f">${e.nombre[0]}</div>
+        <div><div class="bar-name">${e.nombre}</div><div class="bar-sub">${e.rol} · ${e.turno} ${e.entrada}–${e.salida}</div></div>
+        <div style="margin-left:auto;font-size:20px">✅</div>
+      </div>
+      <div class="bar-body">
+        <div style="text-align:center;padding:16px 8px 8px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#059669;margin-bottom:6px">Turno cerrado</div>
+          <div style="font-size:28px;font-weight:800;color:#064e3b">S/ ${totalTurno.toFixed(2)}</div>
+          <div style="font-size:12px;color:var(--txt2);margin-top:4px">🍺 ${e.cervezas} cervezas · cobrado a las ${e.horaCobro}</div>
+        </div>
+        <div style="border-top:1px solid #D1FAE5;margin:0 -12px;padding:10px 12px 0">
+          ${e.rb.slice(0,5).map(r=>`
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--txt2);padding:2px 0">
+              <span>${r.h} · ${r.marca}</span>
+              <span style="color:${r.tipo==='devol'?'#dc2626':'#059669'}">${r.tipo==='devol'?'−':'+'}${r.qty}</span>
+            </div>`).join('')}
+        </div>
+        <button onclick="nuevoTurno(${e.id})" style="width:100%;margin-top:14px;padding:11px;border-radius:10px;background:var(--blue2);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+          🔄 Nuevo turno
+        </button>
+      </div>
+    </div>`;
+
+    // ── TARJETA NORMAL ──
     return `<div class="bar-card">
       <div class="bar-hdr">
         <div class="bar-av" style="background:${e.color};color:#1e3a5f">${e.nombre[0]}</div>
@@ -1096,10 +1150,7 @@ function rBarCards(){
         </div>
         <div style="font-size:11px;font-weight:600;color:var(--txt2);margin-bottom:6px">Selecciona marca y cantidad:</div>
         <div class="cerv-tipo-sel" id="bct-${e.id}">
-          ${(()=>{
-            // Agrupar por categoría en el bar
-            return cervezas.map(c=>`<button class="cts ${String(st.cid)===String(c.id)?'sel':''}" data-cid="${c.id}" onclick="selCT(${e.id},'${c.id}')">${c.icon} ${c.nombre}<span style="font-size:9px;opacity:.7;margin-left:3px">S/${(parseFloat(c.precio)||0).toFixed(0)}</span></button>`).join('');
-          })()}
+          ${cervezas.map(c=>`<button class="cts ${String(st.cid)===String(c.id)?'sel':''}" data-cid="${c.id}" onclick="selCT(${e.id},'${c.id}')">${c.icon} ${c.nombre}<span style="font-size:9px;opacity:.7;margin-left:3px">S/${(parseFloat(c.precio)||0).toFixed(0)}</span></button>`).join('')}
         </div>
         <div class="bar-ctrl">
           <div class="qtrl">
@@ -1121,10 +1172,12 @@ function rBarCards(){
               <div class="cerv-precuenta" id="cprec-${e.id}">${calcPrecuentaLineas(e)}</div>
             </div>
             <button class="cobrar-btn" id="cbtn-${e.id}" onclick="cobrarEmpleada(${e.id})">
-              ${e.cobrado?'✓ Cobrado':'💰 Cobrar turno'}
+              ${e.pendiente>0?'💵 Cobrar resto':'💰 Cobrar turno'}
             </button>
           </div>
-          <div id="cobrado-badge-${e.id}">${e.cobrado?`<div class="cobrado-badge">✓ Turno cobrado a las ${e.horaCobro}</div>`:''}</div>
+          <div id="cobrado-badge-${e.id}">
+            ${e.pendiente>0?`<div class="cobrado-badge" style="background:#FEF3C7;border-color:#FCD34D;color:#92400E">💵 Cobrado S/${e.pendiente.toFixed(2)} · Pendiente S/${(calcTotalEmp(e)-(e.pendiente||0)).toFixed(2)}</div>`:''}
+          </div>
         </div>
         <div class="bar-reg" id="breg-${e.id}"></div>
       </div>

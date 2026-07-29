@@ -601,9 +601,12 @@ tr:hover td{background:var(--blue6)}
     <button class="smbtn ok" onclick="aOv('ov-cerv')">+ Nueva cerveza</button>
   </div>
   <div class="bar-top">
-    <div>
-      <div class="bar-total-l">Total cervezas servidas hoy</div>
-      <div class="bar-total-n" id="bar-big">0</div>
+    <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end">
+      <div>
+        <div class="bar-total-l">Total hoy</div>
+        <div class="bar-total-n" id="bar-big">0</div>
+      </div>
+      <div id="bar-cat-counts" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding-bottom:4px"></div>
     </div>
     <div class="ranking-box">
       <div class="rank-title">🏆 Ranking de ventas</div>
@@ -618,7 +621,7 @@ tr:hover td{background:var(--blue6)}
   <div class="card">
     <div class="ctitle">📋 Registro de movimientos del bar</div>
     <div class="scroll-t"><table>
-      <thead><tr><th>Hora</th><th>Empleada</th><th>Mesa</th><th>Marca</th><th>Cant.</th><th>S/</th></tr></thead>
+      <thead><tr><th>Fecha</th><th>Hora</th><th>Empleada</th><th>Mesa</th><th>Marca</th><th>Cant.</th><th>S/</th></tr></thead>
       <tbody id="bar-hist"></tbody>
     </table></div>
   </div>
@@ -1239,7 +1242,26 @@ function rBarCards(){
 function rBarStats(){
   // Header stats
   document.getElementById('bar-big').textContent=totalCervG;
-  // Ranking en tiempo real desde datos locales (sin esperar servidor)
+
+  // Contadores por categoría — sumar rb de todas las empleadas
+  const catTotales = {};
+  const catIcons = {Cervezas:'🍺',Gaseosas:'🥤',Jugos:'🧃',Bebidas:'💧',Licores:'🍾',Cigarros:'🚬',Snacks:'🍿',Dulces:'🍬',Otros:'📦'};
+  empleadas.forEach(e=>{
+    e.rb.forEach(r=>{
+      if(r.tipo==='devol') return;
+      const c = cervezas.find(x=>x.nombre===r.marca);
+      const cat = c?.categoria||c?.cat||'Cervezas';
+      catTotales[cat] = (catTotales[cat]||0) + r.qty;
+    });
+  });
+  const catEl = document.getElementById('bar-cat-counts');
+  if(catEl) catEl.innerHTML = Object.entries(catTotales).filter(([,q])=>q>0).map(([cat,qty])=>`
+    <div style="background:rgba(255,255,255,.12);border-radius:10px;padding:5px 12px;text-align:center;min-width:60px">
+      <div style="font-size:18px;font-weight:800;color:#fff">${qty}</div>
+      <div style="font-size:9px;color:rgba(255,255,255,.7);font-weight:600;text-transform:uppercase;letter-spacing:.3px">${catIcons[cat]||'📦'} ${cat}</div>
+    </div>`).join('');
+
+  // Ranking en tiempo real
   const sorted=[...empleadas].sort((a,b)=>(b.cervezas-a.cervezas)||((calcTotalEmp(b))-(calcTotalEmp(a))));
   const medals=['🥇','🥈','🥉'];
   document.getElementById('ranking-list').innerHTML=sorted.filter(e=>e.cervezas>0||calcTotalEmp(e)>0).slice(0,4).map((e,i)=>`
@@ -1247,7 +1269,7 @@ function rBarStats(){
       <span class="rank-pos">${medals[i]||'·'}</span>
       <div class="rank-av" style="background:${e.color};color:#1e3a5f">${e.nombre[0]}</div>
       <span class="rank-name">${e.nombre}</span>
-      <span class="rank-count">🍺${e.cervezas} · S/${calcTotalEmp(e).toFixed(0)}</span>
+      <span class="rank-count">📦${e.cervezas} · S/${calcTotalEmp(e).toFixed(0)}</span>
     </div>`).join('') || '<div style="opacity:.7;font-size:12px">Sin datos aún</div>';
 
   // Actualizar solo los números de cada tarjeta (sin destruir el DOM)
@@ -1316,9 +1338,10 @@ function rBarStats(){
 
   // Historial bar
   const movs=empleadas.flatMap(e=>e.rb.map(r=>({...r,emp:e.nombre,col:e.color}))).sort((a,b)=>b.h.localeCompare(a.h));
-  document.getElementById('bar-hist').innerHTML=movs.length?movs.slice(0,40).map(r=>{
+  document.getElementById('bar-hist').innerHTML=movs.length?movs.slice(0,60).map(r=>{
     const c=cervezas.find(x=>x.nombre===r.marca);
     return `<tr>
+      <td style="color:var(--txt2);font-size:10px">${r.fecha||fechaLocal()}</td>
       <td>${r.h}</td>
       <td><span style="background:${r.col||'#93C5FD'};border-radius:99px;padding:1px 8px;font-size:10px;font-weight:600;color:#1e3a5f">${r.emp}</span></td>
       <td>${r.mesa?'Mesa '+r.mesa:'Bar'}</td>
@@ -1326,7 +1349,7 @@ function rBarStats(){
       <td style="font-weight:700;color:${r.tipo==='devol'?'var(--roj)':'var(--vrd)'}">${r.tipo==='devol'?'−':'+'}${r.qty}</td>
       <td>${r.tipo==='devol'?'—':'S/'+(r.qty*(c?c.precio:0)).toFixed(2)}</td>
     </tr>`;
-  }).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--txt2);padding:14px">Sin movimientos</td></tr>';
+  }).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--txt2);padding:14px">Sin movimientos</td></tr>';
 }
 
 function selCT(eid,cid){
@@ -2102,14 +2125,14 @@ async function bReg(eid, tipo) {
     if(pcd){pcd.vendidas=(parseInt(pcd.vendidas)||0)+qty;pcd.ingresos=(parseFloat(pcd.ingresos)||0)+qty*(parseFloat(c.precio)||0);}
     else porCervezaDia.push({nombre:c.nombre,vendidas:qty,ingresos:qty*(parseFloat(c.precio)||0)});
     totalCervG += qty;
-    emp.rb.unshift({h:horaStr, marca:c.nombre, qty, tipo:'salio', mesa:null});
+    emp.rb.unshift({h:horaStr, fecha:fechaLocal(), marca:c.nombre, qty, tipo:'salio', mesa:null});
     historial.unshift({h:horaStr,mesa:'Bar',tipo:'bar',txt:`${emp.nombre} → ${qty}× ${c.nombre}`,monto:qty*precioReal,chica:emp.nombre,icon:'🍺'});
     mostrarToast(`✅ ${qty}× ${c.nombre} → ${emp.nombre}`);
   } else {
     emp.cervezas = Math.max(0, emp.cervezas - qty);
     c.vendidas   = Math.max(0, (c.vendidas||0) - qty);
     totalCervG   = Math.max(0, totalCervG - qty);
-    emp.rb.unshift({h:horaStr, marca:c.nombre, qty, tipo:'devol', mesa:null});
+    emp.rb.unshift({h:horaStr, fecha:fechaLocal(), marca:c.nombre, qty, tipo:'devol', mesa:null});
     mostrarToast(`↩ Devol. ${qty}× ${c.nombre}`);
   }
 
@@ -2136,9 +2159,10 @@ async function bReg(eid, tipo) {
   // Actualizar también el historial global de la tabla
   const allMovs = empleadas.flatMap(e=>e.rb.map(r=>({...r,emp:e.nombre,col:e.color}))).sort((a,b)=>b.h.localeCompare(a.h));
   const elHist = document.getElementById('bar-hist');
-  if(elHist) elHist.innerHTML = allMovs.length ? allMovs.slice(0,40).map(r=>{
+  if(elHist) elHist.innerHTML = allMovs.length ? allMovs.slice(0,60).map(r=>{
     const cv = cervezas.find(x=>x.nombre===r.marca);
     return `<tr>
+      <td style="color:var(--txt2);font-size:10px">${r.fecha||fechaLocal()}</td>
       <td>${r.h}</td>
       <td><span style="background:${r.col||'#93C5FD'};border-radius:99px;padding:1px 8px;font-size:10px;font-weight:600;color:#1e3a5f">${r.emp}</span></td>
       <td>${r.mesa?'Mesa '+r.mesa:'Bar'}</td>
@@ -2146,7 +2170,7 @@ async function bReg(eid, tipo) {
       <td style="font-weight:700;color:${r.tipo==='devol'?'var(--roj)':'var(--vrd)'}">${r.tipo==='devol'?'−':'+'}${r.qty}</td>
       <td>${r.tipo==='devol'?'—':'S/'+(r.qty*(cv?cv.precio:0)).toFixed(2)}</td>
     </tr>`;
-  }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--txt2);padding:14px">Sin movimientos</td></tr>';
+  }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--txt2);padding:14px">Sin movimientos</td></tr>';
 
   // Actualizar ranking y stats globales
   const elBigCerv = document.getElementById('bar-big');

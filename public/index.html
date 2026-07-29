@@ -1632,8 +1632,17 @@ function stats(){
 
 
 
-function fechaLocal() { return new Date().toLocaleDateString('en-CA'); } // YYYY-MM-DD
-function horaLocal()  { return new Date().toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'}); }
+function fechaLocal() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`; // YYYY-MM-DD siempre
+}
+function horaLocal()  {
+  const d = new Date();
+  return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
 function tsLocal()    { return {fecha_local: fechaLocal(), hora_local: horaLocal()}; }
 // =================== API — CONEXIÓN CON BASE DE DATOS ===================
 const API = '/api';

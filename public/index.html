@@ -1186,13 +1186,21 @@ function rBarCards(){
       </div>
       <div class="bar-body">
         <div class="bar-stats" id="bstats-${e.id}">
-          <div class="bstat"><div class="bstat-n" style="color:var(--accent)" id="bcerv-${e.id}">${e.cervezas}</div><div class="bstat-l">cervezas</div></div>
+          <div class="bstat"><div class="bstat-n" style="color:var(--accent)" id="bcerv-${e.id}">${e.cervezas}</div><div class="bstat-l">unidades</div></div>
           <div class="bstat"><div class="bstat-n" id="bmesas-${e.id}">${e.mesas.length}</div><div class="bstat-l">mesas</div></div>
           <div class="bstat"><div class="bstat-n" id="bventas-${e.id}">S/${Math.round(e.ventas)}</div><div class="bstat-l">ventas</div></div>
         </div>
         <div style="font-size:11px;font-weight:600;color:var(--txt2);margin-bottom:6px">Selecciona marca y cantidad:</div>
         <div class="cerv-tipo-sel" id="bct-${e.id}">
-          ${cervezas.map(c=>`<button class="cts ${String(st.cid)===String(c.id)?'sel':''}" data-cid="${c.id}" onclick="selCT(${e.id},'${c.id}')">${c.icon} ${c.nombre}<span style="font-size:9px;opacity:.7;margin-left:3px">S/${(parseFloat(c.precio)||0).toFixed(0)}</span></button>`).join('')}
+          ${(()=>{
+            const cats = [...new Set(cervezas.map(c=>c.categoria||c.cat||'Cervezas'))];
+            return cats.map(cat=>{
+              const items = cervezas.filter(c=>(c.categoria||c.cat||'Cervezas')===cat);
+              const catIcon = {Cervezas:'🍺',Gaseosas:'🥤',Jugos:'🧃',Bebidas:'💧',Licores:'🍾',Cigarros:'🚬',Snacks:'🍿',Dulces:'🍬',Otros:'📦'}[cat]||'📦';
+              return `<div style="font-size:9px;font-weight:800;color:var(--txt2);text-transform:uppercase;letter-spacing:.5px;margin:5px 0 3px;width:100%">${catIcon} ${cat}</div>`
+                + items.map(cv=>`<button class="cts ${String(st.cid)===String(cv.id)?'sel':''}" data-cid="${cv.id}" onclick="selCT(${e.id},'${cv.id}')">${cv.icon} ${cv.nombre}<span style="font-size:9px;opacity:.7;margin-left:3px">S/${(parseFloat(cv.precio)||0).toFixed(0)}</span></button>`).join('');
+            }).join('');
+          })()}
         </div>
         <div class="bar-ctrl">
           <div class="qtrl">
@@ -1360,11 +1368,23 @@ function calcTotalEmp(e){
   return Math.max(0,t);
 }
 function calcDetalleEmp(e){
-  const cervM=e.rb.filter(r=>r.tipo==='manual'||r.tipo==='salio').reduce((s,r)=>s+r.qty,0);
-  const cervD=e.rb.filter(r=>r.tipo==='devol').reduce((s,r)=>s+r.qty,0);
-  const cervPed=e.rb.filter(r=>r.tipo==='venta').reduce((s,r)=>s+r.qty,0);
-  const totalCerv=e.cervezas;
-  return `🍺 ${totalCerv} cervezas · 🍽️ ${e.mesas.length} mesas activas${cervD>0?' · ↩ '+cervD+' devol.':''}`;
+  const cervD = e.rb.filter(r=>r.tipo==='devol').reduce((s,r)=>s+r.qty,0);
+  // Contar por categoría
+  const porCat = {};
+  e.rb.filter(r=>r.tipo!=='devol').forEach(r=>{
+    const c = cervezas.find(x=>x.nombre===r.marca);
+    const cat = c?.categoria||c?.cat||'Cervezas';
+    porCat[cat] = (porCat[cat]||0) + r.qty;
+  });
+  e.rb.filter(r=>r.tipo==='devol').forEach(r=>{
+    const c = cervezas.find(x=>x.nombre===r.marca);
+    const cat = c?.categoria||c?.cat||'Cervezas';
+    porCat[cat] = Math.max(0,(porCat[cat]||0) - r.qty);
+  });
+  const catIcons = {Cervezas:'🍺',Gaseosas:'🥤',Jugos:'🧃',Bebidas:'💧',Licores:'🍾',Cigarros:'🚬',Snacks:'🍿',Dulces:'🍬',Otros:'📦'};
+  const partes = Object.entries(porCat).filter(([,q])=>q>0).map(([cat,q])=>`${catIcons[cat]||'📦'} ${q} ${cat}`);
+  const resumen = partes.length ? partes.join(' · ') : '0 productos';
+  return `${resumen} · 🍽️ ${e.mesas.length} mesas${cervD>0?' · ↩ '+cervD+' devol.':''}`;
 }
 function calcPrecuentaLineas(e){
   // Group by marca de cerveza del empleada
@@ -1709,6 +1729,8 @@ async function cargarDatos() {
       precio:    parseFloat(c.precio)    || 0,
       stock:     parseInt(c.stock)       || 0,
       vendidas:  parseInt(c.vendidas_hoy)|| 0,
+      categoria: c.categoria || 'Cervezas',
+      cat:       c.categoria || 'Cervezas',
     }));
     if (plats) menu = plats.map(p=>({
       ...p,
@@ -2359,20 +2381,18 @@ async function guardarCervMarca() {
   errEl.style.display='none';
 
   if(editId){
-    // EDITAR existente
-    await api('/cervezas/'+editId,'PUT',{nombre:nom,precio,stock});
+    await api('/cervezas/'+editId,'PUT',{nombre:nom,precio,stock,categoria:cat});
     const c=cervezas.find(x=>String(x.id)===String(editId));
-    if(c){ c.nombre=nom; c.precio=precio; c.stock=stock; c.icon=icon; c.cat=cat; }
+    if(c){ c.nombre=nom; c.precio=precio; c.stock=stock; c.icon=icon; c.cat=cat; c.categoria=cat; }
     mostrarToast('✅ '+nom+' actualizado — S/'+precio.toFixed(2));
   } else {
-    // CREAR nuevo
-    const r = await api('/cervezas','POST',{nombre:nom,precio,icon,stock});
+    const r = await api('/cervezas','POST',{nombre:nom,precio,icon,stock,categoria:cat});
     if(r){
       cervezas.push({
         ...r,
         precio:   parseFloat(r.precio)||precio,
         stock:    parseInt(r.stock)||stock,
-        vendidas: 0, cat,
+        vendidas: 0, cat, categoria:cat,
       });
     }
     mostrarToast('✅ '+nom+' agregado — S/'+precio.toFixed(2));

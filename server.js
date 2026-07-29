@@ -159,15 +159,25 @@ app.post('/api/pedidos', (req,res) => {
 app.post('/api/pedidos/cobrar-mesa', (req,res) => {
   const {mesa_id} = req.body;
   const h=hoy(req);
-  const peds = all('SELECT total FROM pedidos WHERE mesa_id=? AND fecha=? AND cobrado=0',[mesa_id,h]);
+  const peds = all('SELECT * FROM pedidos WHERE mesa_id=? AND fecha=? AND cobrado=0',[mesa_id,h]);
   const totalMesa = peds.reduce((s,p)=>s+(p.total||0),0);
+  // Recoger items para el historial
+  const items = [];
+  peds.forEach(p => {
+    const its = all('SELECT * FROM pedido_items WHERE pedido_id=?',[p.id]);
+    its.forEach(it => {
+      const ex = items.find(x=>x.nombre===it.nombre&&x.tipo===it.tipo);
+      if (ex) ex.cantidad += it.cantidad;
+      else items.push({nombre:it.nombre, tipo:it.tipo, cantidad:it.cantidad});
+    });
+  });
   run('UPDATE pedidos SET cobrado=1 WHERE mesa_id=? AND fecha=? AND cobrado=0',[mesa_id,h]);
   run('UPDATE mesas SET estado=?,empleada_id=NULL WHERE id=?',['libre',mesa_id]);
-  res.json({ok:true,total:totalMesa});
+  res.json({ok:true, total:totalMesa, items});
 });
 
 // ── BAR ──────────────────────────────────────────────────
-app.get('/api/bar/movimientos', (_,res) => {
+app.get('/api/bar/movimientos', (req,res) => {
   const h=hoy(req);
   res.json(all("SELECT bm.*, e.nombre as emp_nombre, e.color as emp_color FROM bar_movimientos bm LEFT JOIN empleadas e ON e.id=bm.empleada_id WHERE bm.fecha=? AND bm.tipo!='cierre' ORDER BY bm.id DESC LIMIT 100",[h]));
 });

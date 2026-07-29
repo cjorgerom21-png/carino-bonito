@@ -1255,10 +1255,11 @@ function rBarCards(){
 
 // Actualización ligera: solo actualiza números y registros SIN tocar controles
 function rBarStats(){
-  // Total = suma de todas las categorías (de rb local o servidor)
+  // Total = suma de todas las categorías desde rb local (siempre actualizado)
   const totalCats = Object.values(catTotales).reduce((s,v)=>s+Math.max(0,v),0);
-  const totalMostrar = totalCats || totalCervG;
-  document.getElementById('bar-big').textContent = totalMostrar;
+  // Fallback: usar servidor si rb está vacío  
+  const totalServidor = porCategoriaDia.reduce((s,p)=>s+(parseInt(p.qty)||0),0);
+  document.getElementById('bar-big').textContent = totalCats || totalServidor || totalCervG;
 
   // Contadores por categoría — servidor como base + rb local en tiempo real
   const catTotales = {};

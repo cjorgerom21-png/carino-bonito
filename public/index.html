@@ -778,7 +778,33 @@ tr:hover td{background:var(--blue6)}
     <div id="mesa-det-body"></div>
   </div>
 </div>
+<!-- Modal comprobante WhatsApp -->
+<div class="ov" id="ov-comprobante">
+  <div class="mod" style="max-width:380px">
+    <div class="mod-t">🧾 ¿Enviar comprobante?</div>
+    <div id="ov-comp-resumen" style="background:var(--bg);border:1px solid var(--brd);border-radius:9px;padding:12px;margin-bottom:14px;font-size:13px;line-height:1.9"></div>
+    <div class="fg">
+      <label class="fl">WhatsApp del cliente</label>
+      <div style="display:flex;gap:6px">
+        <select id="comp-codigo" style="padding:8px;border-radius:8px;border:1px solid var(--brd);background:var(--sf);color:var(--txt);font-size:13px;width:90px">
+          <option value="51">🇵🇪 +51</option>
+          <option value="593">🇪🇨 +593</option>
+          <option value="57">🇨🇴 +57</option>
+          <option value="56">🇨🇱 +56</option>
+          <option value="54">🇦🇷 +54</option>
+          <option value="1">🇺🇸 +1</option>
+        </select>
+        <input class="fi" id="comp-tel" type="tel" placeholder="987654321" style="flex:1;font-size:16px">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn bd" style="flex:1" onclick="cobrarSinComprobante()">Sin comprobante</button>
+      <button class="btn bm" style="flex:1;background:#25D366;border-color:#25D366" onclick="cobrarConComprobante()">📲 Enviar por WhatsApp</button>
+    </div>
+  </div>
+</div>
 <!-- Modal registro pedidos por mesa -->
+
 <div class="ov" id="ov-pedidos-mesa">
   <div class="mod" style="max-width:520px">
     <div class="mod-t" id="ov-pm-title">📋 Pedidos — Mesa</div>
@@ -1439,10 +1465,12 @@ function rCaja(){
   const histCaja = historial.filter(h=>h.tipo==='cobro'||h.tipo==='turno');
   document.getElementById('caja-hist').innerHTML=histCaja.length?histCaja.map(h=>`
     <div class="ch-row">
-      <div class="ch-h">${h.h}</div>
       <div class="ch-ico ${h.tipo}">${h.icon}</div>
-      <div class="ch-body">
-        <div class="ch-t">${h.mesa!=='Bar'&&h.mesa!=='—'?'Mesa '+h.mesa+(h.chica?' · 👩'+h.chica:''):h.chica||h.mesa}</div>
+      <div class="ch-body" style="flex:1;min-width:0">
+        <div class="ch-t" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span>${h.mesa!=='Bar'&&h.mesa!=='—'?'Mesa '+h.mesa+(h.chica?' · 👩'+h.chica:''):h.chica||h.mesa}</span>
+          <span style="font-size:10px;background:var(--blue5);color:var(--blue);border-radius:99px;padding:1px 7px;font-weight:600">${h.fecha||fechaLocal()} ${h.h}</span>
+        </div>
         <div class="ch-s">${h.txt}</div>
       </div>
       ${h.monto>0?`<div class="ch-m">S/${h.monto.toFixed(2)}</div>`:''}
@@ -1825,24 +1853,102 @@ async function confirmarPedido() {
   mostrarToast('✅ Pedido guardado en base de datos');
 }
 
+// Estado temporal del cobro en curso
+let _cobroPendiente = null;
+
 async function cobrarMesa() {
   if (!mesaSel) return;
   const mesa = mesas.find(m=>m.id===mesaSel);
-  const r = await api('/pedidos/cobrar-mesa','POST',{...tsLocal(), mesa_id:mesaSel});
-  if (!r) { mostrarToast('⚠️ Error al cobrar','warn'); return; }
+  if (!mesa) return;
 
-  const itemsTxt = r.items ? r.items.filter(i=>i.tipo!=='cerveza').map(i=>`${i.nombre}×${i.cantidad}`).join(', ') : '';
+  // Obtener detalle de la mesa para el comprobante
+  const detalle = await api('/mesas/'+mesaSel+'/detalle');
+  const total = detalle?.total || mesa.total || 0;
+  const items = detalle?.items || [];
+
+  // Guardar estado para usar después
+  _cobroPendiente = { mesaId: mesaSel, mesa, total, items };
+
+  // Mostrar resumen en el modal
+  const itemsHtml = items.map(it=>
+    `<div style="display:flex;justify-content:space-between">
+      <span>${it.nombre} ×${it.cantidad}</span>
+      <span>S/${(it.subtotal||it.precio_unit*it.cantidad||0).toFixed(2)}</span>
+    </div>`
+  ).join('');
+  document.getElementById('ov-comp-resumen').innerHTML = `
+    <div style="font-weight:700;margin-bottom:6px;color:var(--blue)">Mesa ${mesaSel}${mesa.chica?' · 👩'+mesa.chica:''}</div>
+    ${itemsHtml}
+    <div style="display:flex;justify-content:space-between;border-top:1px solid var(--brd);margin-top:8px;padding-top:8px;font-weight:800;font-size:15px">
+      <span>TOTAL</span><span style="color:var(--blue)">S/${total.toFixed(2)}</span>
+    </div>`;
+  document.getElementById('comp-tel').value = '';
+  cOv('ov-mesa-det');
+  aOv('ov-comprobante');
+  setTimeout(()=>document.getElementById('comp-tel').focus(), 200);
+}
+
+async function _ejecutarCobro() {
+  if (!_cobroPendiente) return null;
+  const {mesaId, mesa} = _cobroPendiente;
+  const r = await api('/pedidos/cobrar-mesa','POST',{...tsLocal(), mesa_id:mesaId});
+  if (!r) { mostrarToast('⚠️ Error al cobrar','warn'); return null; }
+  const itemsTxt = (r.items||[]).filter(i=>i.tipo!=='cerveza').map(i=>`${i.nombre}×${i.cantidad}`).join(', ');
   const cervTxt = mesa.totalCerv>0 ? `🍺${mesa.totalCerv}` : '';
   const resumenTxt = [itemsTxt, cervTxt].filter(Boolean).join(' · ') || 'Sin detalle';
-  const hEntry={h:horaLocal(),mesa:mesaSel,tipo:'cobro',txt:resumenTxt,monto:r.total||mesa.total,chica:mesa.chica,icon:'💰'};
+  const hEntry={h:horaLocal(),fecha:fechaLocal(),mesa:mesaId,tipo:'cobro',txt:resumenTxt,monto:r.total||mesa.total,chica:mesa.chica,icon:'💰'};
   historial.unshift(hEntry);
   api('/historial','POST',{...tsLocal(),...hEntry});
   totalDia += r.total||mesa.total;
   mesasCob++;
   const emp = empleadas.find(e=>e.nombre===mesa.chica);
-  if (emp) emp.mesas = emp.mesas.filter(id=>id!==mesaSel);
+  if (emp) emp.mesas = emp.mesas.filter(id=>id!==mesaId);
   Object.assign(mesa,{estado:'libre',chica:null,pedidos:[],cervezas:{},totalCerv:0,total:0});
   pedidoActual={};
+  mesaSel = mesaId; // restaurar para rPedido
+  rPedido(); rMesas(); stats();
+  return r;
+}
+
+async function cobrarSinComprobante() {
+  cOv('ov-comprobante');
+  await _ejecutarCobro();
+  mostrarToast('✅ Mesa cobrada');
+  _cobroPendiente = null;
+}
+
+async function cobrarConComprobante() {
+  const codigo = document.getElementById('comp-codigo').value;
+  const tel = document.getElementById('comp-tel').value.replace(/\D/g,'');
+  if (!tel || tel.length < 7) { mostrarToast('⚠️ Ingresa un número válido','warn'); return; }
+
+  cOv('ov-comprobante');
+  const r = await _ejecutarCobro();
+  if (!r) return;
+
+  const {mesaId, mesa, items, total} = _cobroPendiente;
+  _cobroPendiente = null;
+
+  // Generar texto del comprobante para WhatsApp
+  const fecha = new Date().toLocaleDateString('es',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const hora  = horaLocal();
+  const negocio = localStorage.getItem('cb_negocio') || 'Cariño Bonito';
+  let txt = `🧾 *${negocio}*\n`;
+  txt += `📅 ${fecha} ${hora}\n`;
+  txt += `🪑 Mesa ${mesaId}${mesa.chica?' | '+mesa.chica:''}\n`;
+  txt += `━━━━━━━━━━━━━━━\n`;
+  items.forEach(it => {
+    const sub = (it.subtotal || (it.precio_unit * it.cantidad) || 0).toFixed(2);
+    txt += `• ${it.nombre} ×${it.cantidad}  S/${sub}\n`;
+  });
+  txt += `━━━━━━━━━━━━━━━\n`;
+  txt += `*TOTAL: S/${total.toFixed(2)}*\n`;
+  txt += `\n¡Gracias por su visita! 🙏`;
+
+  const url = `https://wa.me/${codigo}${tel}?text=${encodeURIComponent(txt)}`;
+  window.open(url, '_blank');
+  mostrarToast('✅ Cobrado · Abriendo WhatsApp');
+}
   rPedido(); rMesas(); stats();
   mostrarToast('✅ Mesa cobrada y guardada');
 }
@@ -2052,7 +2158,7 @@ async function confirmarCobroTurno() {
     mostrarToast(`💵 Cobrado S/ ${cobrado.toFixed(2)} — Pendiente S/ ${queda.toFixed(2)}`);
   }
 
-  const hEntryT={h:r.hora||'--:--', mesa:'Bar', tipo:'cobro',
+  const hEntryT={h:r.hora||horaLocal(),fecha:fechaLocal(), mesa:'Bar', tipo:'cobro',
     txt:`${esCobradoTotal?'Cierre':'Pago parcial'} ${emp.nombre} · S/ ${cobrado.toFixed(2)}${esCobradoTotal?'':' (parcial)'}`,
     monto:cobrado, chica:emp.nombre, icon: esCobradoTotal?'💳':'💵'};
   historial.unshift(hEntryT);

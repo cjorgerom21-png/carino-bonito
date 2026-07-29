@@ -882,7 +882,7 @@ function T(t){
     if(x===t) document.querySelectorAll('.ntab')[i].classList.add('active');
   });
   if(t==='pedido') rPedido();
-  if(t==='bar') rBar();
+  if(t==='bar') { rBar(); window._barNeedsRefresh = false; }
   if(t==='empleadas') rEmpleadas();
   if(t==='caja') rCaja();
   if(t==='config') rConfig();
@@ -1811,7 +1811,7 @@ async function cargarDatos() {
         const cobroEmp = (resumen?.cobrosEmp||[]).find(x=>x.empleada_id===e.id);
         const movs = (resumen?.movimientos||[])
           .filter(m=>m.empleada_id===e.id)
-          .map(m=>({h:m.hora, marca:m.marca, qty:m.cantidad, tipo:m.tipo, mesa:m.mesa_id}))
+          .map(m=>({h:m.hora, fecha:m.fecha, marca:m.marca, qty:m.cantidad, tipo:m.tipo, mesa:m.mesa_id}))
           .reverse();
         return {
           ...e,
@@ -1836,6 +1836,9 @@ async function cargarDatos() {
       }));
     }
     rMesas(); rColGrid(); stats();
+    // Renderizar BAR si está activo, o guardar para cuando se abra
+    if (document.getElementById('sec-bar')?.classList.contains('active')) rBar();
+    else { window._barNeedsRefresh = true; }
     mostrarToast('✅ Datos del día restaurados desde la base de datos','ok');
   } catch(e) {
     console.error(e);

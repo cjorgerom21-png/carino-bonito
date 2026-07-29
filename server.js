@@ -320,7 +320,10 @@ app.get('/api/dia/resumen', (req, res) => {
     FROM empleadas e WHERE e.activa=1
   `, [...F,...F,...F,...F,...F]);
 
-  const movimientos  = all(`SELECT bm.*, e.nombre as emp_nombre FROM bar_movimientos bm LEFT JOIN empleadas e ON e.id=bm.empleada_id WHERE bm.fecha=? AND bm.tipo!='cierre' ORDER BY bm.id ASC`, F);
+  // Movimientos: buscar por fecha del cliente Y por fecha UTC del servidor
+  const hUTC = new Date().toISOString().split('T')[0];
+  const fechaBusqueda = h === hUTC ? h : `${h}','${hUTC}`;
+  const movimientos  = all(`SELECT bm.*, e.nombre as emp_nombre FROM bar_movimientos bm LEFT JOIN empleadas e ON e.id=bm.empleada_id WHERE bm.fecha IN ('${fechaBusqueda}') AND bm.tipo!='cierre' ORDER BY bm.id ASC`);
   const mesasOcupadas= all(`SELECT DISTINCT mesa_id FROM pedidos WHERE fecha=? AND cobrado=0`, F);
   const historialDia = all(`SELECT * FROM historial_dia WHERE fecha=? ORDER BY id DESC`, F);
 

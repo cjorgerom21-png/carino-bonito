@@ -272,7 +272,8 @@ app.get('/api/analytics', (req,res) => {
 // ── RESUMEN DEL DÍA ──────────────────────────────────────
 app.get('/api/dia/resumen', (req, res) => {
   const h = req.query.fecha || hoy(req);
-  const F = [h]; // solo fecha del cliente — sin rango de dos días
+  const F = [h];
+  console.log(`[resumen] fecha solicitada: ${h} | TZ: ${process.env.TZ||'sin TZ'} | server hoy: ${hoy(req)}`);
 
   run(`CREATE TABLE IF NOT EXISTS cobros_turno (id INTEGER PRIMARY KEY AUTOINCREMENT, empleada_id INTEGER, total REAL DEFAULT 0, cervezas INTEGER DEFAULT 0, fecha TEXT, hora TEXT, parcial INTEGER DEFAULT 0)`);
   try { run(`ALTER TABLE cobros_turno ADD COLUMN parcial INTEGER DEFAULT 0`); } catch(e) {}
@@ -426,10 +427,14 @@ app.get('/api/dia/resumen/fecha/:fecha', (req, res) => {
 app.delete('/api/dia/reset', (req, res) => {
   const h = hoy(req);
   try {
-    const pedidosHoy = all('SELECT id FROM pedidos WHERE fecha=?', [h]);
-    pedidosHoy.forEach(p => run('DELETE FROM pedido_items WHERE pedido_id=?', [p.id]));
-    run('DELETE FROM pedidos WHERE fecha=?', [h]);
+    // Borrar TODOS los pedidos no cobrados (sin filtro de fecha)
+    const pedidosPend = all('SELECT id FROM pedidos WHERE cobrado=0');
+    pedidosPend.forEach(p => run('DELETE FROM pedido_items WHERE pedido_id=?', [p.id]));
+    run('DELETE FROM pedidos WHERE cobrado=0');
+    // Borrar movimientos de bar de hoy Y de cualquier fecha no cobrada
     run('DELETE FROM bar_movimientos WHERE fecha=?', [h]);
+    // También borrar movimientos sin fecha o con fecha rara
+    run("DELETE FROM bar_movimientos WHERE fecha IS NULL OR fecha=''");
     try { run('DELETE FROM cobros_turno WHERE fecha=?', [h]); } catch(e2) {}
     try { run('DELETE FROM historial_dia WHERE fecha=?', [h]); } catch(e3) {}
     const cierresHoy = all("SELECT id FROM cierres_caja WHERE date(creado_en)=?", [h]);

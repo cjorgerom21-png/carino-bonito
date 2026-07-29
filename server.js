@@ -204,10 +204,13 @@ app.get('/api/bar/movimientos', (req,res) => {
 });
 
 app.post('/api/bar/movimientos', (req,res) => {
-  const {empleada_id,mesa_id,cerveza_id,marca,cantidad,tipo,precio_unit} = req.body;
+  const {empleada_id,mesa_id,cerveza_id,marca,cantidad,tipo,precio_unit,categoria} = req.body;
   const h=hoy(req), hr=hora(req);
-  run('INSERT INTO bar_movimientos (empleada_id,mesa_id,cerveza_id,marca,cantidad,tipo,precio_unit,fecha,hora) VALUES (?,?,?,?,?,?,?,?,?)',
-    [empleada_id||null,mesa_id||null,cerveza_id||null,marca,cantidad,tipo,precio_unit||0,h,hr]);
+  // Obtener categoría de la cerveza si no viene en el body
+  const cerv = cerveza_id ? get('SELECT categoria FROM cervezas WHERE id=?',[cerveza_id]) : null;
+  const cat = categoria || cerv?.categoria || 'Cervezas';
+  run('INSERT INTO bar_movimientos (empleada_id,mesa_id,cerveza_id,marca,cantidad,tipo,precio_unit,fecha,hora,categoria) VALUES (?,?,?,?,?,?,?,?,?,?)',
+    [empleada_id||null,mesa_id||null,cerveza_id||null,marca,cantidad,tipo,precio_unit||0,h,hr,cat]);
   if (tipo==='venta' || tipo==='salio') {
     run('UPDATE cervezas SET stock=MAX(0,stock-?) WHERE id=?',[cantidad,cerveza_id]);
   } else if (tipo==='devol') {
@@ -282,11 +285,15 @@ app.get('/api/dia/resumen', (req, res) => {
   const menuDia  = get(`SELECT COALESCE(SUM(pi.subtotal),0) as t FROM pedido_items pi JOIN pedidos p ON p.id=pi.pedido_id WHERE p.fecha IN (?,?) AND pi.tipo!='cerveza' AND p.cobrado=1`, F);
   const cobrosBar= get(`SELECT COALESCE(SUM(total),0) as t FROM cobros_turno WHERE fecha IN (?,?)`, F);
   const cobrosEmp= all(`SELECT empleada_id, SUM(total) as total_cobrado, MAX(hora) as ultima_hora, MAX(CASE WHEN parcial=0 THEN 1 ELSE 0 END) as tiene_cierre FROM cobros_turno WHERE fecha IN (?,?) GROUP BY empleada_id`, F);
-  const cervsDia = get(`SELECT COALESCE(SUM(cantidad),0) as t FROM bar_movimientos WHERE fecha IN (?,?) AND tipo IN ('venta','salio','manual')`, F);
-  const cervsDevol=get(`SELECT COALESCE(SUM(cantidad),0) as t FROM bar_movimientos WHERE fecha IN (?,?) AND tipo='devol'`, F);
+  const cervsDia = get(`SELECT COALESCE(SUM(cantidad),0) as t FROM bar_movimientos WHERE fecha IN (?,?) AND tipo IN ('venta','salio','manual') AND (categoria='Cervezas' OR categoria IS NULL OR categoria='')`, F);
+  const cervsDevol=get(`SELECT COALESCE(SUM(cantidad),0) as t FROM bar_movimientos WHERE fecha IN (?,?) AND tipo='devol' AND (categoria='Cervezas' OR categoria IS NULL OR categoria='')`, F);
 
-  // Por cerveza vendida hoy
-  const porCerveza = all(`SELECT marca as nombre, SUM(cantidad) as vendidas, SUM(cantidad*precio_unit) as ingresos FROM bar_movimientos WHERE fecha IN (?,?) AND tipo IN ('venta','salio','manual') GROUP BY marca`, F);
+  // Por categoría para contadores separados
+  const porCategoria = all(`SELECT COALESCE(categoria,'Cervezas') as cat, SUM(cantidad) as qty FROM bar_movimientos WHERE fecha IN (?,?) AND tipo IN ('venta','salio','manual') GROUP BY COALESCE(categoria,'Cervezas')`, F);
+  const porCatDevol  = all(`SELECT COALESCE(categoria,'Cervezas') as cat, SUM(cantidad) as qty FROM bar_movimientos WHERE fecha IN (?,?) AND tipo='devol' GROUP BY COALESCE(categoria,'Cervezas')`, [...F]);
+
+  // Por marca vendida hoy
+  const porCerveza = all(`SELECT marca as nombre, COALESCE(categoria,'Cervezas') as categoria, SUM(cantidad) as vendidas, SUM(cantidad*precio_unit) as ingresos FROM bar_movimientos WHERE fecha IN (?,?) AND tipo IN ('venta','salio','manual') GROUP BY marca`, F);
 
   const porEmp = all(`
     SELECT e.id, e.nombre,
@@ -307,7 +314,7 @@ app.get('/api/dia/resumen', (req, res) => {
     mesasCob:   cajaDia?.m||0,
     totalCervG: Math.max(0,(cervsDia?.t||0)-(cervsDevol?.t||0)),
     totalMenu:  menuDia?.t||0,
-    porEmp, porCerveza, movimientos,
+    porEmp, porCerveza, porCategoria, movimientos,
     mesasOcupadas: mesasOcupadas.map(m=>m.mesa_id),
     cobrosEmp, historialDia
   });

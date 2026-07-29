@@ -31,6 +31,15 @@ app.post('/api/historial', (req, res) => {
   res.json({ ok: true });
 });
 
+// ── DEBUG — ver qué hay en bar_movimientos ───────────────
+app.get('/api/debug/bar', (req, res) => {
+  const ultimos = all('SELECT id,fecha,hora,marca,cantidad,tipo,categoria FROM bar_movimientos ORDER BY id DESC LIMIT 20');
+  const fechas  = all('SELECT DISTINCT fecha, COUNT(*) as n FROM bar_movimientos GROUP BY fecha ORDER BY fecha DESC');
+  const hReq    = req.query.fecha || hoy(req);
+  const deHoy   = all('SELECT * FROM bar_movimientos WHERE fecha=? ORDER BY id DESC',[hReq]);
+  res.json({ hoy: hReq, fechas, ultimos, deHoy });
+});
+
 // ── STATUS / DIAGNÓSTICO ─────────────────────────────────
 app.get('/api/status', (req,res) => {
   const { DB_PATH } = require('./database');
@@ -206,9 +215,9 @@ app.get('/api/bar/movimientos', (req,res) => {
 app.post('/api/bar/movimientos', (req,res) => {
   const {empleada_id,mesa_id,cerveza_id,marca,cantidad,tipo,precio_unit,categoria} = req.body;
   const h=hoy(req), hr=hora(req);
-  // Obtener categoría de la cerveza si no viene en el body
   const cerv = cerveza_id ? get('SELECT categoria FROM cervezas WHERE id=?',[cerveza_id]) : null;
   const cat = categoria || cerv?.categoria || 'Cervezas';
+  console.log(`[bar/mov POST] marca=${marca} fecha=${h} hora=${hr} tipo=${tipo} cat=${cat} fecha_local=${req.body.fecha_local||'NO VIENE'}`);
   run('INSERT INTO bar_movimientos (empleada_id,mesa_id,cerveza_id,marca,cantidad,tipo,precio_unit,fecha,hora,categoria) VALUES (?,?,?,?,?,?,?,?,?,?)',
     [empleada_id||null,mesa_id||null,cerveza_id||null,marca,cantidad,tipo,precio_unit||0,h,hr,cat]);
   if (tipo==='venta' || tipo==='salio') {
@@ -216,6 +225,9 @@ app.post('/api/bar/movimientos', (req,res) => {
   } else if (tipo==='devol') {
     run('UPDATE cervezas SET stock=stock+? WHERE id=?',[cantidad,cerveza_id]);
   }
+  // Verificar que se guardó
+  const check = get('SELECT COUNT(*) as n FROM bar_movimientos WHERE marca=? AND hora=?',[marca,hr]);
+  console.log(`[bar/mov POST] guardado OK: ${check?.n} registro(s)`);
   res.json({ok:true,hora:hr});
 });
 

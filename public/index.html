@@ -1752,6 +1752,7 @@ async function cargarDatos() {
       precio:    parseFloat(c.precio)    || 0,
       stock:     parseInt(c.stock)       || 0,
       vendidas:  parseInt(c.vendidas_hoy)|| 0,
+      icon:      c.icon || '🍺',
       categoria: c.categoria || 'Cervezas',
       cat:       c.categoria || 'Cervezas',
     }));
@@ -2369,11 +2370,14 @@ async function guardarTodosPlatos() {
 function abrirModalCerv(editId=null){
   document.getElementById('mc-edit-id').value=editId||'';
   document.getElementById('mc-error').style.display='none';
+  const titleEl = document.getElementById('mc-title');
   if(!editId){
+    if(titleEl) titleEl.textContent='Nuevo producto del bar';
     ['mc-nom','mc-precio','mc-stock'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
     const cat=document.getElementById('mc-cat');if(cat)cat.value='Cervezas';
     const ico=document.getElementById('mc-icon');if(ico)ico.value='🍺';
   } else {
+    if(titleEl) titleEl.textContent='✏️ Editar producto';
     const c=cervezas.find(x=>String(x.id)===String(editId));
     if(c){
       document.getElementById('mc-nom').value=(c.nombre||'');

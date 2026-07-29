@@ -638,7 +638,11 @@ tr:hover td{background:var(--blue6)}
 <section class="sec" id="sec-caja">
   <div class="row">
     <div style="font-size:15px;font-weight:700;color:var(--blue)">💰 Control de Caja</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="smbtn danger" onclick="cerrarCaja()">🔒 Cerrar caja</button><button class="smbtn danger" onclick="resetHoy()" style="background:#FEF2F2;color:#DC2626;border-color:#FCA5A5;font-weight:700">🗑️ Borrar datos de hoy (prueba)</button></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="smbtn ok" onclick="verDiasAnteriores()">📅 Días anteriores</button>
+      <button class="smbtn danger" onclick="cerrarCaja()">🔒 Cerrar caja</button>
+      <button class="smbtn danger" onclick="resetHoy()" style="background:#FEF2F2;color:#DC2626;border-color:#FCA5A5;font-weight:700">🗑️ Borrar datos de hoy (prueba)</button>
+    </div>
   </div>
   <div class="caja-top">
     <div class="cstat"><div class="cstat-n" id="cj-tot">S/0</div><div class="cstat-l">Total del día</div></div>
@@ -780,6 +784,16 @@ tr:hover td{background:var(--blue6)}
       <button onclick="cOv('ov-mesa-det')" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--txt2)">✕</button>
     </div>
     <div id="mesa-det-body"></div>
+  </div>
+</div>
+<!-- Modal días anteriores -->
+<div class="ov" id="ov-dias-ant">
+  <div class="mod" style="max-width:600px">
+    <div class="mod-t">📅 Días con datos registrados</div>
+    <div id="ov-dias-body" style="max-height:70vh;overflow-y:auto"></div>
+    <div style="margin-top:12px;text-align:right">
+      <button class="btn bd" onclick="cOv('ov-dias-ant')">Cerrar</button>
+    </div>
   </div>
 </div>
 <!-- Modal comprobante WhatsApp -->
@@ -2483,6 +2497,70 @@ async function elimCerv(id) {
 }
 
 // ── CAJA CIERRE → DB ────────────────────────────────────
+async function verDiasAnteriores() {
+  aOv('ov-dias-ant');
+  document.getElementById('ov-dias-body').innerHTML = '<div style="padding:20px;text-align:center;color:var(--txt2)">Cargando...</div>';
+  const data = await api('/fechas');
+  if (!data) { document.getElementById('ov-dias-body').innerHTML = '<div style="padding:16px;color:red">Error</div>'; return; }
+  const todasFechas = new Set([...(data.fechas||[]).map(f=>f.fecha),...(data.barFechas||[]).map(f=>f.fecha)]);
+  const fechasArr = [...todasFechas].sort().reverse();
+  if (!fechasArr.length) { document.getElementById('ov-dias-body').innerHTML = '<div style="padding:20px;text-align:center;color:var(--txt2)">Sin datos históricos</div>'; return; }
+  document.getElementById('ov-dias-body').innerHTML = fechasArr.map(f => {
+    const pd = (data.fechas||[]).find(x=>x.fecha===f)||{pedidos:0,total:0};
+    const bd = (data.barFechas||[]).find(x=>x.fecha===f)||{movimientos:0,total:0};
+    return `<div style="border:1px solid var(--brd);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;background:var(--sf)">
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:14px">${f}</div>
+        <div style="font-size:11px;color:var(--txt2);margin-top:2px">🍽️ ${pd.pedidos} cobradas · S/${parseFloat(pd.total||0).toFixed(2)} &nbsp;·&nbsp; 🍺 ${bd.movimientos} movimientos bar · S/${parseFloat(bd.total||0).toFixed(2)}</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button onclick="verResumenFecha('${f}')" style="padding:6px 12px;border-radius:8px;background:var(--blue2);color:#fff;border:none;font-size:12px;font-weight:600;cursor:pointer">📊 Ver</button>
+        <button onclick="cerrarCajaFecha('${f}')" style="padding:6px 12px;border-radius:8px;background:#059669;color:#fff;border:none;font-size:12px;font-weight:600;cursor:pointer">🔒 Cerrar</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function verResumenFecha(fecha) {
+  const r = await api('/dia/resumen/fecha/'+fecha);
+  if (!r) return;
+  const win = window.open('','_blank','width=600,height=700');
+  win.document.write(`<html><head><title>Resumen ${fecha}</title>
+  <style>body{font-family:sans-serif;padding:20px;max-width:500px;margin:0 auto}h2{color:#1A56DB}
+  table{width:100%;border-collapse:collapse}td,th{padding:8px;border-bottom:1px solid #eee;text-align:left}
+  th{font-weight:700;color:#666;font-size:11px;text-transform:uppercase}
+  .big{font-size:24px;font-weight:800;color:#1A56DB}</style></head><body>
+  <h2>📊 Resumen — ${fecha}</h2>
+  <div style="display:flex;gap:16px;margin:16px 0;flex-wrap:wrap">
+    <div><div class="big">S/${parseFloat(r.totalDia||0).toFixed(2)}</div><div style="font-size:11px;color:#666">Total del día</div></div>
+    <div><div class="big">${r.mesasCob||0}</div><div style="font-size:11px;color:#666">Mesas cobradas</div></div>
+    <div><div class="big">🍺${r.totalCervG||0}</div><div style="font-size:11px;color:#666">Cervezas/Prod</div></div>
+    <div><div class="big">S/${parseFloat(r.totalMenu||0).toFixed(2)}</div><div style="font-size:11px;color:#666">Ventas menú</div></div>
+  </div>
+  <h3>Por empleada</h3>
+  <table><tr><th>Empleada</th><th>Productos</th><th>Ventas bar</th><th>Ventas mesa</th></tr>
+  ${(r.porEmpBar||[]).map(e=>`<tr><td><b>${e.nombre}</b></td><td>${e.cervezas}</td><td>S/${parseFloat(e.ventas_bar||0).toFixed(2)}</td><td>S/${parseFloat((r.pedidosEmp||[]).find(p=>p.nombre===e.nombre)?.ventas_mesa||0).toFixed(2)}</td></tr>`).join('')}
+  </table>
+  <h3>Por producto</h3>
+  <table><tr><th>Producto</th><th>Vendidas</th><th>Ingresos</th></tr>
+  ${(r.porCerveza||[]).map(c=>`<tr><td>${c.nombre}</td><td>${c.vendidas}</td><td>S/${parseFloat(c.ingresos||0).toFixed(2)}</td></tr>`).join('')}
+  </table></body></html>`);
+}
+
+async function cerrarCajaFecha(fecha) {
+  if (!confirm(`¿Cerrar caja del día ${fecha}?\nSe guardará en el historial semanal.`)) return;
+  const r = await api('/dia/resumen/fecha/'+fecha);
+  if (!r) { mostrarToast('⚠️ Error','warn'); return; }
+  await api('/caja/cerrar','POST',{
+    totalDia:r.totalDia, mesasCob:r.mesasCob, totalCervG:r.totalCervG, totalMenu:r.totalMenu,
+    porEmpleada:(r.porEmpBar||[]).map(e=>({nombre:e.nombre,cervezas:e.cervezas,ventas:e.ventas_bar})),
+    porCerveza:(r.porCerveza||[]).map(c=>({nombre:c.nombre,vendidas:c.vendidas,ingresos:c.ingresos})),
+    porPlato:[]
+  });
+  mostrarToast(`✅ Caja del ${fecha} cerrada`);
+  cOv('ov-dias-ant');
+}
+
 async function cerrarCaja() {
   if (!confirm('¿Cerrar la caja del día? Se guardará el resumen en la base de datos.')) return;
 

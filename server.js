@@ -80,17 +80,19 @@ app.get('/api/cervezas', (req,res) => {
   res.json(rows);
 });
 app.post('/api/cervezas', (req,res) => {
-  const {nombre,icon} = req.body;
+  const {nombre,icon,categoria} = req.body;
   const precio = parseFloat(req.body.precio)||0;
   const stock  = parseInt(req.body.stock)||24;
-  const id = insert('INSERT INTO cervezas (nombre,precio,icon,stock) VALUES (?,?,?,?)',[nombre,precio,icon||'🍺',stock]);
-  res.json({id,nombre,precio,icon,stock});
+  const cat    = categoria||'Cervezas';
+  const id = insert('INSERT INTO cervezas (nombre,precio,icon,stock,categoria) VALUES (?,?,?,?,?)',[nombre,precio,icon||'🍺',stock,cat]);
+  res.json({id,nombre,precio,icon,stock,categoria:cat});
 });
 app.put('/api/cervezas/:id', (req,res) => {
-  const {nombre} = req.body;
+  const {nombre,categoria} = req.body;
   const precio = parseFloat(req.body.precio)||0;
   const stock = parseInt(req.body.stock)||0;
-  run('UPDATE cervezas SET nombre=?,precio=?,stock=? WHERE id=?',[nombre,precio,stock,req.params.id]);
+  const cat = categoria||'Cervezas';
+  run('UPDATE cervezas SET nombre=?,precio=?,stock=?,categoria=? WHERE id=?',[nombre,precio,stock,cat,req.params.id]);
   res.json({ok:true});
 });
 app.delete('/api/cervezas/:id', (req,res) => {

@@ -52,7 +52,8 @@ function crearTablas() {
       precio REAL DEFAULT 8,
       icon TEXT DEFAULT '🍺',
       stock INTEGER DEFAULT 24,
-      activa INTEGER DEFAULT 1
+      activa INTEGER DEFAULT 1,
+      categoria TEXT DEFAULT 'Cervezas'
     );
     CREATE TABLE IF NOT EXISTS platos (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -167,6 +168,7 @@ insertarDatosIniciales();
 
 // Migraciones — agregar columnas faltantes si la DB es antigua
 try { db.prepare(`ALTER TABLE cobros_turno ADD COLUMN parcial INTEGER DEFAULT 0`).run(); } catch(e) {}
+try { db.prepare(`ALTER TABLE cervezas ADD COLUMN categoria TEXT DEFAULT 'Cervezas'`).run(); } catch(e) {}
 try { db.prepare(`CREATE TABLE IF NOT EXISTS historial_dia (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT, hora TEXT, mesa TEXT, tipo TEXT, txt TEXT, monto REAL DEFAULT 0, chica TEXT, icon TEXT)`).run(); } catch(e) {}
 
 console.log(`📦 DB en: ${DB_PATH}`);

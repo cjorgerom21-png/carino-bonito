@@ -187,16 +187,11 @@ app.post('/api/bar/movimientos', (req,res) => {
 
 // ── COBRO DE TURNO EMPLEADA ──────────────────────────────
 app.post('/api/bar/cobrar-turno', (req, res) => {
-  const { empleada_id, total, cervezas: totalCerv } = req.body;
+  const { empleada_id, total, cervezas: totalCerv, parcial } = req.body;
   const h = hoy(req), hr = hora(req);
-  // Guardar en tabla de cobros de turno (separada del registro bar)
-  run(`CREATE TABLE IF NOT EXISTS cobros_turno (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    empleada_id INTEGER, total REAL DEFAULT 0,
-    cervezas INTEGER DEFAULT 0, fecha TEXT, hora TEXT
-  )`);
-  run('INSERT INTO cobros_turno (empleada_id,total,cervezas,fecha,hora) VALUES (?,?,?,?,?)',
-    [empleada_id||null, parseFloat(total)||0, totalCerv||0, h, hr]);
+  run(`CREATE TABLE IF NOT EXISTS cobros_turno (id INTEGER PRIMARY KEY AUTOINCREMENT, empleada_id INTEGER, total REAL DEFAULT 0, cervezas INTEGER DEFAULT 0, fecha TEXT, hora TEXT, parcial INTEGER DEFAULT 0)`);
+  run('INSERT INTO cobros_turno (empleada_id,total,cervezas,fecha,hora,parcial) VALUES (?,?,?,?,?,?)',
+    [empleada_id||null, parseFloat(total)||0, totalCerv||0, h, hr, parcial?1:0]);
   res.json({ ok: true, hora: hr, total, empleada_id });
 });
 
@@ -243,8 +238,10 @@ app.get('/api/dia/resumen', (req, res) => {
   const h = hoy();
   const cajaDia    = get(`SELECT COALESCE(SUM(total),0) as t, COUNT(DISTINCT mesa_id) as m FROM pedidos WHERE fecha=? AND cobrado=1`, [h]);
   // Sumar cobros de turno del bar al totalDia
-  run(`CREATE TABLE IF NOT EXISTS cobros_turno (id INTEGER PRIMARY KEY AUTOINCREMENT, empleada_id INTEGER, total REAL DEFAULT 0, cervezas INTEGER DEFAULT 0, fecha TEXT, hora TEXT)`);
+  run(`CREATE TABLE IF NOT EXISTS cobros_turno (id INTEGER PRIMARY KEY AUTOINCREMENT, empleada_id INTEGER, total REAL DEFAULT 0, cervezas INTEGER DEFAULT 0, fecha TEXT, hora TEXT, parcial INTEGER DEFAULT 0)`);
   const cobrosBar  = get(`SELECT COALESCE(SUM(total),0) as t FROM cobros_turno WHERE fecha=?`, [h]);
+  // Cobros por empleada para restaurar estado en el frontend
+  const cobrosEmp  = all(`SELECT empleada_id, SUM(total) as total_cobrado, MAX(hora) as ultima_hora, MAX(CASE WHEN parcial=0 THEN 1 ELSE 0 END) as tiene_cierre FROM cobros_turno WHERE fecha=? GROUP BY empleada_id`, [h]);
   const cervsDia   = get(`SELECT COALESCE(SUM(cantidad),0) as t FROM bar_movimientos WHERE fecha=? AND tipo NOT IN ('devol','cierre') AND tipo IN ('venta','salio','manual')`, [h]);
   const cervsDevol = get(`SELECT COALESCE(SUM(cantidad),0) as t FROM bar_movimientos WHERE fecha=? AND tipo='devol'`, [h]);
   const menuDia    = get(`SELECT COALESCE(SUM(pi.subtotal),0) as t FROM pedido_items pi JOIN pedidos p ON p.id=pi.pedido_id WHERE p.fecha=? AND pi.tipo!='cerveza' AND p.cobrado=1`, [h]);
@@ -271,8 +268,27 @@ app.get('/api/dia/resumen', (req, res) => {
     totalMenu: menuDia?.t || 0,
     porEmp,
     movimientos,
-    mesasOcupadas: mesasOcupadas.map(m=>m.mesa_id)
+    mesasOcupadas: mesasOcupadas.map(m=>m.mesa_id),
+    cobrosEmp  // estado de cobro por empleada
   });
+});
+
+// ── ELIMINAR TODOS LOS PEDIDOS DE UNA MESA ───────────────
+app.delete('/api/mesas/:id/pedidos', (req, res) => {
+  const h = hoy(req);
+  const pedidos = all('SELECT * FROM pedidos WHERE mesa_id=? AND fecha=? AND cobrado=0', [req.params.id, h]);
+  let totalRestado = 0;
+  pedidos.forEach(p => {
+    const items = all('SELECT * FROM pedido_items WHERE pedido_id=?', [p.id]);
+    items.forEach(it => {
+      if (it.tipo === 'cerveza') run('UPDATE cervezas SET stock=stock+? WHERE nombre=?', [it.cantidad, it.marca]);
+    });
+    run('DELETE FROM pedido_items WHERE pedido_id=?', [p.id]);
+    totalRestado += p.total || 0;
+  });
+  run('DELETE FROM pedidos WHERE mesa_id=? AND fecha=? AND cobrado=0', [req.params.id, h]);
+  run("UPDATE mesas SET estado='libre', empleada_id=NULL WHERE id=?", [req.params.id]);
+  res.json({ ok: true, total_restado: totalRestado, count: pedidos.length });
 });
 
 // ── ELIMINAR PEDIDO (para pruebas) ───────────────────────

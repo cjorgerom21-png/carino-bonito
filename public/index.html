@@ -852,6 +852,7 @@ let menu=[];
 let mesaSel=null,pedidoActual={},historial=[];
 let totalDia=0,mesasCob=0,totalCervG=0,totalMenu=0;
 let porCervezaDia=[];
+let porCategoriaDia=[];
 let editEmpId=null,colorSel=COLS[0];
 const barSt={};
 
@@ -1243,15 +1244,17 @@ function rBarStats(){
   // Header stats
   document.getElementById('bar-big').textContent=totalCervG;
 
-  // Contadores por categoría — sumar rb de todas las empleadas
+  // Contadores por categoría — desde servidor (preciso) + rb local (tiempo real)
   const catTotales = {};
   const catIcons = {Cervezas:'🍺',Gaseosas:'🥤',Jugos:'🧃',Bebidas:'💧',Licores:'🍾',Cigarros:'🚬',Snacks:'🍿',Dulces:'🍬',Otros:'📦'};
+  // Base del servidor
+  porCategoriaDia.forEach(pc=>{ catTotales[pc.cat] = parseInt(pc.qty)||0; });
+  // Sumar movimientos locales no guardados aún (optimistic)
   empleadas.forEach(e=>{
-    e.rb.forEach(r=>{
-      if(r.tipo==='devol') return;
-      const c = cervezas.find(x=>x.nombre===r.marca);
-      const cat = c?.categoria||c?.cat||'Cervezas';
-      catTotales[cat] = (catTotales[cat]||0) + r.qty;
+    e.rb.filter(r=>r.tipo==='salio'||r.tipo==='manual').forEach(r=>{
+      const cv = cervezas.find(x=>x.nombre===r.marca);
+      const cat = cv?.categoria||cv?.cat||'Cervezas';
+      if (!porCategoriaDia.find(p=>p.cat===cat)) catTotales[cat]=(catTotales[cat]||0)+r.qty;
     });
   });
   const catEl = document.getElementById('bar-cat-counts');
@@ -1778,6 +1781,7 @@ async function cargarDatos() {
       totalCervG = parseInt(resumen.totalCervG)    || 0;
       totalMenu  = parseFloat(resumen.totalMenu)   || 0;
       porCervezaDia = resumen.porCerveza || [];
+      porCategoriaDia = resumen.porCategoria || [];
     }
 
     // Cargar empleadas con estado real del día
@@ -2121,10 +2125,14 @@ async function bReg(eid, tipo) {
   if (tipo==='salio') {
     emp.cervezas += qty;
     c.vendidas = (c.vendidas||0) + qty;
-    // Actualizar porCervezaDia para rCaja
+    // Actualizar porCervezaDia y porCategoriaDia para rCaja
     const pcd=porCervezaDia.find(x=>x.nombre===c.nombre);
     if(pcd){pcd.vendidas=(parseInt(pcd.vendidas)||0)+qty;pcd.ingresos=(parseFloat(pcd.ingresos)||0)+qty*(parseFloat(c.precio)||0);}
     else porCervezaDia.push({nombre:c.nombre,vendidas:qty,ingresos:qty*(parseFloat(c.precio)||0)});
+    const catActual = c.categoria||c.cat||'Cervezas';
+    const pcat=porCategoriaDia.find(x=>x.cat===catActual);
+    if(pcat) pcat.qty=(parseInt(pcat.qty)||0)+qty;
+    else porCategoriaDia.push({cat:catActual,qty});
     totalCervG += qty;
     emp.rb.unshift({h:horaStr, fecha:fechaLocal(), marca:c.nombre, qty, tipo:'salio', mesa:null});
     historial.unshift({h:horaStr,mesa:'Bar',tipo:'bar',txt:`${emp.nombre} → ${qty}× ${c.nombre}`,monto:qty*precioReal,chica:emp.nombre,icon:'🍺'});
@@ -2186,7 +2194,8 @@ async function bReg(eid, tipo) {
     marca: c.nombre,
     cantidad: qty,
     tipo: tipo,
-    precio_unit: precioReal
+    precio_unit: precioReal,
+    categoria: c.categoria||c.cat||'Cervezas'
   }).then(r => {
     if (!r) {
       mostrarToast('⚠️ Error guardando movimiento','warn');

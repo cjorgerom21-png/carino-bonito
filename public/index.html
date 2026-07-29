@@ -349,6 +349,7 @@ tr:hover td{background:var(--blue6)}
 @media(max-width:600px){.an-three{grid-template-columns:1fr}}
 
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 
@@ -1919,7 +1920,7 @@ async function cobrarSinComprobante() {
 
 async function cobrarConComprobante() {
   const codigo = document.getElementById('comp-codigo').value;
-  const tel = document.getElementById('comp-tel').value.replace(/\D/g,'');
+  const tel    = document.getElementById('comp-tel').value.replace(/\D/g,'');
   if (!tel || tel.length < 7) { mostrarToast('⚠️ Ingresa un número válido','warn'); return; }
 
   cOv('ov-comprobante');
@@ -1929,25 +1930,113 @@ async function cobrarConComprobante() {
   const {mesaId, mesa, items, total} = _cobroPendiente;
   _cobroPendiente = null;
 
-  // Generar texto del comprobante para WhatsApp
-  const fecha = new Date().toLocaleDateString('es',{day:'2-digit',month:'2-digit',year:'numeric'});
-  const hora  = horaLocal();
   const negocio = localStorage.getItem('cb_negocio') || 'Cariño Bonito';
-  let txt = `🧾 *${negocio}*\n`;
-  txt += `📅 ${fecha} ${hora}\n`;
-  txt += `🪑 Mesa ${mesaId}${mesa.chica?' | '+mesa.chica:''}\n`;
-  txt += `━━━━━━━━━━━━━━━\n`;
-  items.forEach(it => {
-    const sub = (it.subtotal || (it.precio_unit * it.cantidad) || 0).toFixed(2);
-    txt += `• ${it.nombre} ×${it.cantidad}  S/${sub}\n`;
-  });
-  txt += `━━━━━━━━━━━━━━━\n`;
-  txt += `*TOTAL: S/${total.toFixed(2)}*\n`;
-  txt += `\n¡Gracias por su visita! 🙏`;
+  const fecha   = new Date().toLocaleDateString('es',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const hora    = horaLocal();
 
-  const url = `https://wa.me/${codigo}${tel}?text=${encodeURIComponent(txt)}`;
-  window.open(url, '_blank');
-  mostrarToast('✅ Cobrado · Abriendo WhatsApp');
+  // ── Generar PDF con jsPDF ──
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'mm', format:[80, 200], orientation:'portrait' });
+
+  const W = 80; // ancho del ticket en mm
+  let y = 8;
+  const line = () => { doc.setDrawColor(200); doc.line(4, y, W-4, y); y += 4; };
+  const txt  = (text, size=9, bold=false, align='left', color=[30,30,30]) => {
+    doc.setFontSize(size);
+    doc.setFont('helvetica', bold?'bold':'normal');
+    doc.setTextColor(...color);
+    if (align === 'center') doc.text(text, W/2, y, {align:'center'});
+    else if (align === 'right') doc.text(text, W-4, y, {align:'right'});
+    else doc.text(text, 4, y);
+    y += size * 0.45;
+  };
+
+  // Cabecera
+  txt('🍺 '+negocio, 13, true, 'center', [26,86,219]);
+  y += 1;
+  txt('Sistema de Gestión', 7, false, 'center', [120,120,120]);
+  y += 3;
+  line();
+
+  txt(`Fecha: ${fecha}   Hora: ${hora}`, 8);
+  txt(`Mesa: ${mesaId}${mesa.chica?' | Atendido por: '+mesa.chica:''}`, 8);
+  y += 2;
+  line();
+
+  // Items
+  txt('DETALLE', 8, true);
+  y += 1;
+  items.forEach(it => {
+    const precio = (it.subtotal || (it.precio_unit*(it.cantidad||1)) || 0).toFixed(2);
+    const nombre = it.nombre.length > 22 ? it.nombre.slice(0,21)+'.' : it.nombre;
+    doc.setFontSize(8.5); doc.setFont('helvetica','normal'); doc.setTextColor(30,30,30);
+    doc.text(`${it.cantidad}x ${nombre}`, 4, y);
+    doc.text(`S/${precio}`, W-4, y, {align:'right'});
+    y += 5;
+  });
+
+  y += 1;
+  line();
+  txt(`TOTAL`, 11, true, 'left', [26,86,219]);
+  doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(26,86,219);
+  doc.text(`S/ ${total.toFixed(2)}`, W-4, y-5, {align:'right'});
+  y += 3;
+  line();
+
+  txt('¡Gracias por su visita!', 8, false, 'center', [120,120,120]);
+  txt('Vuelva pronto 🙏', 8, false, 'center', [120,120,120]);
+
+  // Ajustar altura del PDF al contenido
+  const finalH = Math.max(y + 6, 60);
+  const doc2 = new jsPDF({ unit:'mm', format:[80, finalH], orientation:'portrait' });
+  doc2.setFontSize(9); // reset
+
+  // Re-generar en doc2 con altura correcta
+  let y2 = 8;
+  const T = (text, size=9, bold=false, align='left', color=[30,30,30]) => {
+    doc2.setFontSize(size); doc2.setFont('helvetica', bold?'bold':'normal'); doc2.setTextColor(...color);
+    if (align==='center') doc2.text(text, W/2, y2, {align:'center'});
+    else if (align==='right') doc2.text(text, W-4, y2, {align:'right'});
+    else doc2.text(text, 4, y2);
+    y2 += size * 0.45;
+  };
+  const L = () => { doc2.setDrawColor(200); doc2.line(4,y2,W-4,y2); y2+=4; };
+
+  T('🍺 '+negocio, 13, true, 'center', [26,86,219]); y2+=1;
+  T('Sistema de Gestión', 7, false, 'center', [120,120,120]); y2+=3; L();
+  T(`Fecha: ${fecha}   Hora: ${hora}`, 8);
+  T(`Mesa: ${mesaId}${mesa.chica?' | '+mesa.chica:''}`, 8); y2+=2; L();
+  T('DETALLE', 8, true); y2+=1;
+  items.forEach(it => {
+    const precio = (it.subtotal||(it.precio_unit*(it.cantidad||1))||0).toFixed(2);
+    const nombre = it.nombre.length>22?it.nombre.slice(0,21)+'.':it.nombre;
+    doc2.setFontSize(8.5); doc2.setFont('helvetica','normal'); doc2.setTextColor(30,30,30);
+    doc2.text(`${it.cantidad}x ${nombre}`, 4, y2);
+    doc2.text(`S/${precio}`, W-4, y2, {align:'right'});
+    y2+=5;
+  });
+  y2+=1; L();
+  T('TOTAL', 11, true, 'left', [26,86,219]);
+  doc2.setFontSize(13); doc2.setFont('helvetica','bold'); doc2.setTextColor(26,86,219);
+  doc2.text(`S/ ${total.toFixed(2)}`, W-4, y2-5, {align:'right'});
+  y2+=3; L();
+  T('¡Gracias por su visita!', 8, false, 'center', [120,120,120]);
+  T('Vuelva pronto 🙏', 8, false, 'center', [120,120,120]);
+
+  // Descargar PDF
+  const fileName = `comprobante-mesa${mesaId}-${fecha.replace(/\//g,'-')}.pdf`;
+  doc2.save(fileName);
+
+  // Abrir WhatsApp con texto + instrucción de adjuntar
+  const txtWA = `🧾 *${negocio}*\n📅 ${fecha} ${hora}\n🪑 Mesa ${mesaId}${mesa.chica?' | '+mesa.chica:''}\n━━━━━━━━━━━━━━━\n`
+    + items.map(it=>`• ${it.nombre} ×${it.cantidad}  S/${(it.subtotal||(it.precio_unit*it.cantidad)||0).toFixed(2)}`).join('\n')
+    + `\n━━━━━━━━━━━━━━━\n*TOTAL: S/${total.toFixed(2)}*\n\n¡Gracias por su visita! 🙏\n_(El PDF del comprobante se descargó en su dispositivo)_`;
+
+  setTimeout(() => {
+    window.open(`https://wa.me/${codigo}${tel}?text=${encodeURIComponent(txtWA)}`, '_blank');
+  }, 800);
+
+  mostrarToast('✅ PDF generado · Abriendo WhatsApp');
 }
 
 async function liberarMesa() {

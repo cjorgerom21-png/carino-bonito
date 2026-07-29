@@ -12,11 +12,12 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 function hoy(req)  {
   if (req?.body?.fecha_local) return req.body.fecha_local;
-  // Fallback: intentar TZ de Perú
+  if (req?.query?.fecha) return req.query.fecha;
   return new Date().toLocaleDateString('en-CA', {timeZone: process.env.TZ || 'America/Lima'});
 }
 function hora(req) {
   if (req?.body?.hora_local) return req.body.hora_local;
+  if (req?.query?.hora) return req.query.hora;
   return new Date().toLocaleTimeString('es', {hour:'2-digit', minute:'2-digit', timeZone: process.env.TZ || 'America/Lima'});
 }
 
@@ -31,7 +32,7 @@ app.post('/api/historial', (req, res) => {
 });
 
 // ── STATUS / DIAGNÓSTICO ─────────────────────────────────
-app.get('/api/status', (_,res) => {
+app.get('/api/status', (req,res) => {
   const { DB_PATH } = require('./database');
   const fs = require('fs');
   res.json({
@@ -44,7 +45,7 @@ app.get('/api/status', (_,res) => {
 });
 
 // ── EMPLEADAS ────────────────────────────────────────────
-app.get('/api/empleadas', (_,res) => {
+app.get('/api/empleadas', (req,res) => {
   res.json(all('SELECT * FROM empleadas WHERE activa=1 ORDER BY id'));
 });
 app.post('/api/empleadas', (req,res) => {
@@ -65,7 +66,7 @@ app.delete('/api/empleadas/:id', (req,res) => {
 });
 
 // ── CERVEZAS ─────────────────────────────────────────────
-app.get('/api/cervezas', (_,res) => {
+app.get('/api/cervezas', (req,res) => {
   const rows = all('SELECT * FROM cervezas WHERE activa=1 ORDER BY id');
   const h = hoy(req);
   rows.forEach(c => {
@@ -98,7 +99,7 @@ app.delete('/api/cervezas/:id', (req,res) => {
 });
 
 // ── PLATOS ───────────────────────────────────────────────
-app.get('/api/platos', (_,res) => {
+app.get('/api/platos', (req,res) => {
   res.json(all('SELECT * FROM platos WHERE activo=1 ORDER BY categoria,nombre'));
 });
 app.post('/api/platos', (req,res) => {
@@ -125,7 +126,7 @@ app.delete('/api/platos/:id', (req,res) => {
 });
 
 // ── MESAS ────────────────────────────────────────────────
-app.get('/api/mesas', (_,res) => {
+app.get('/api/mesas', (req,res) => {
   const mesas = all('SELECT m.*, e.nombre as empleada_nombre, e.color as empleada_color FROM mesas m LEFT JOIN empleadas e ON e.id=m.empleada_id ORDER BY m.id');
   const h = hoy(req);
   mesas.forEach(m => {

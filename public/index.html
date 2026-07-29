@@ -1836,9 +1836,25 @@ async function cargarDatos() {
       }));
     }
     rMesas(); rColGrid(); stats();
-    // Renderizar BAR si está activo, o guardar para cuando se abra
-    if (document.getElementById('sec-bar')?.classList.contains('active')) rBar();
-    else { window._barNeedsRefresh = true; }
+    // Forzar render del registro de movimientos del bar (siempre visible en DOM)
+    setTimeout(() => {
+      rBarCards();
+      // Render bar-hist directamente
+      const allMovs = empleadas.flatMap(e=>e.rb.map(r=>({...r,emp:e.nombre,col:e.color}))).sort((a,b)=>b.h.localeCompare(a.h));
+      const elHist = document.getElementById('bar-hist');
+      if(elHist) elHist.innerHTML = allMovs.length ? allMovs.slice(0,60).map(r=>{
+        const cv = cervezas.find(x=>x.nombre===r.marca);
+        return `<tr>
+          <td style="color:var(--txt2);font-size:10px">${r.fecha||fechaLocal()}</td>
+          <td>${r.h}</td>
+          <td><span style="background:${r.col||'#93C5FD'};border-radius:99px;padding:1px 8px;font-size:10px;font-weight:600;color:#1e3a5f">${r.emp}</span></td>
+          <td>${r.mesa?'Mesa '+r.mesa:'Bar'}</td>
+          <td>${r.marca}</td>
+          <td style="font-weight:700;color:${r.tipo==='devol'?'var(--roj)':'var(--vrd)'}">${r.tipo==='devol'?'−':'+'}${r.qty}</td>
+          <td>${r.tipo==='devol'?'—':'S/'+(r.qty*(cv?cv.precio:0)).toFixed(2)}</td>
+        </tr>`;
+      }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--txt2);padding:14px">Sin movimientos</td></tr>';
+    }, 100);
     mostrarToast('✅ Datos del día restaurados desde la base de datos','ok');
   } catch(e) {
     console.error(e);

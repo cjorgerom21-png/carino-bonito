@@ -1656,7 +1656,7 @@ async function cargarDatos() {
   mostrarToast('⏳ Cargando datos...','ok');
   try {
     const [emps, cervs, plats, mesasApi, resumen] = await Promise.all([
-      api('/empleadas'), api('/cervezas'), api('/platos'), api('/mesas'), api('/dia/resumen')
+      api('/empleadas'), api('/cervezas'), api('/platos'), api('/mesas'), api('/dia/resumen?fecha='+fechaLocal())
     ]);
 
     // Cargar catálogos base
@@ -2977,7 +2977,7 @@ document.addEventListener('visibilitychange', () => {
 // Sync silencioso cada 60 segundos (mantiene stats en vivo)
 setInterval(async () => {
   try {
-    const resumen = await api('/dia/resumen');
+    const resumen = await api('/dia/resumen?fecha='+fechaLocal());
     if (resumen) {
       totalDia   = resumen.totalDia   || totalDia;
       mesasCob   = resumen.mesasCob   || mesasCob;

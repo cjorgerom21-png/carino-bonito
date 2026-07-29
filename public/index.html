@@ -1949,9 +1949,6 @@ async function cobrarConComprobante() {
   window.open(url, '_blank');
   mostrarToast('✅ Cobrado · Abriendo WhatsApp');
 }
-  rPedido(); rMesas(); stats();
-  mostrarToast('✅ Mesa cobrada y guardada');
-}
 
 async function liberarMesa() {
   if (!mesaSel) return;

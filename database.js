@@ -135,7 +135,19 @@ function crearTablas() {
       total REAL DEFAULT 0,
       cervezas INTEGER DEFAULT 0,
       fecha TEXT,
-      hora TEXT
+      hora TEXT,
+      parcial INTEGER DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS historial_dia (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      fecha TEXT,
+      hora TEXT,
+      mesa TEXT,
+      tipo TEXT,
+      txt TEXT,
+      monto REAL DEFAULT 0,
+      chica TEXT,
+      icon TEXT
     );
   `);
 }

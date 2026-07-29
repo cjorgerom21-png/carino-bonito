@@ -20,6 +20,16 @@ function hora(req) {
   return new Date().toLocaleTimeString('es', {hour:'2-digit', minute:'2-digit', timeZone: process.env.TZ || 'America/Lima'});
 }
 
+// ── HISTORIAL DEL DÍA ────────────────────────────────────
+app.post('/api/historial', (req, res) => {
+  const { hora, mesa, tipo, txt, monto, chica, icon } = req.body;
+  const h = hoy(req);
+  run('CREATE TABLE IF NOT EXISTS historial_dia (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT, hora TEXT, mesa TEXT, tipo TEXT, txt TEXT, monto REAL DEFAULT 0, chica TEXT, icon TEXT)');
+  run('INSERT INTO historial_dia (fecha,hora,mesa,tipo,txt,monto,chica,icon) VALUES (?,?,?,?,?,?,?,?)',
+    [h, hora||'', String(mesa||''), tipo||'cobro', txt||'', parseFloat(monto)||0, chica||'', icon||'💰']);
+  res.json({ ok: true });
+});
+
 // ── STATUS / DIAGNÓSTICO ─────────────────────────────────
 app.get('/api/status', (_,res) => {
   const { DB_PATH } = require('./database');
@@ -103,6 +113,12 @@ app.put('/api/platos/:id', (req,res) => {
   run('UPDATE platos SET nombre=?,precio=?,categoria=? WHERE id=?',[nombre,precio,categoria,req.params.id]);
   res.json({ok:true});
 });
+app.delete('/api/platos', (req,res) => {
+  // Elimina TODOS los platos (para limpieza de datos de prueba)
+  run('UPDATE platos SET activo=0 WHERE 1=1');
+  res.json({ok:true});
+});
+
 app.delete('/api/platos/:id', (req,res) => {
   run('UPDATE platos SET activo=0 WHERE id=?',[req.params.id]);
   res.json({ok:true});
@@ -272,6 +288,9 @@ app.get('/api/dia/resumen', (req, res) => {
   `, [h]);
   const mesasOcupadas = all(`SELECT DISTINCT mesa_id FROM pedidos WHERE fecha=? AND cobrado=0`, [h]);
   res.json({
+  run('CREATE TABLE IF NOT EXISTS historial_dia (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT, hora TEXT, mesa TEXT, tipo TEXT, txt TEXT, monto REAL DEFAULT 0, chica TEXT, icon TEXT)');
+  const historialDia = all('SELECT * FROM historial_dia WHERE fecha=? ORDER BY id DESC', [h]);
+
     totalDia: (cajaDia?.t || 0) + (cobrosBar?.t || 0),
     mesasCob: cajaDia?.m || 0,
     totalCervG: Math.max(0, (cervsDia?.t||0) - (cervsDevol?.t||0)),
@@ -279,7 +298,8 @@ app.get('/api/dia/resumen', (req, res) => {
     porEmp,
     movimientos,
     mesasOcupadas: mesasOcupadas.map(m=>m.mesa_id),
-    cobrosEmp  // estado de cobro por empleada
+    cobrosEmp,
+    historialDia
   });
 });
 
@@ -361,8 +381,8 @@ app.delete('/api/dia/reset', (req, res) => {
     pedidosHoy.forEach(p => run('DELETE FROM pedido_items WHERE pedido_id=?', [p.id]));
     run('DELETE FROM pedidos WHERE fecha=?', [h]);
     run('DELETE FROM bar_movimientos WHERE fecha=?', [h]);
-    // Limpiar cobros de turno del día
     try { run('DELETE FROM cobros_turno WHERE fecha=?', [h]); } catch(e2) {}
+    try { run('DELETE FROM historial_dia WHERE fecha=?', [h]); } catch(e3) {}
     const cierresHoy = all("SELECT id FROM cierres_caja WHERE date(creado_en)=?", [h]);
     cierresHoy.forEach(c => {
       run('DELETE FROM cierre_empleadas WHERE cierre_id=?', [c.id]);

@@ -1255,23 +1255,28 @@ function rBarCards(){
 
 // Actualización ligera: solo actualiza números y registros SIN tocar controles
 function rBarStats(){
-  // Header stats — total = suma de TODAS las categorías
-  const totalTodas = porCategoriaDia.reduce((s,p)=>s+(parseInt(p.qty)||0),0) || totalCervG;
-  document.getElementById('bar-big').textContent = totalTodas || totalCervG;
+  // Total = suma de todas las categorías (de rb local o servidor)
+  const totalCats = Object.values(catTotales).reduce((s,v)=>s+Math.max(0,v),0);
+  const totalMostrar = totalCats || totalCervG;
+  document.getElementById('bar-big').textContent = totalMostrar;
 
-  // Contadores por categoría — desde servidor (preciso) + rb local (tiempo real)
+  // Contadores por categoría — servidor como base + rb local en tiempo real
   const catTotales = {};
   const catIcons = {Cervezas:'🍺',Gaseosas:'🥤',Jugos:'🧃',Bebidas:'💧',Licores:'🍾',Cigarros:'🚬',Snacks:'🍿',Dulces:'🍬',Otros:'📦'};
-  // Base del servidor
-  porCategoriaDia.forEach(pc=>{ catTotales[pc.cat] = parseInt(pc.qty)||0; });
-  // Sumar movimientos locales no guardados aún (optimistic)
+  // Siempre calcular desde rb local (fuente de verdad en tiempo real)
   empleadas.forEach(e=>{
-    e.rb.filter(r=>r.tipo==='salio'||r.tipo==='manual').forEach(r=>{
+    e.rb.forEach(r=>{
       const cv = cervezas.find(x=>x.nombre===r.marca);
       const cat = cv?.categoria||cv?.cat||'Cervezas';
-      if (!porCategoriaDia.find(p=>p.cat===cat)) catTotales[cat]=(catTotales[cat]||0)+r.qty;
+      if(r.tipo==='devol') catTotales[cat]=(catTotales[cat]||0)-r.qty;
+      else catTotales[cat]=(catTotales[cat]||0)+r.qty;
     });
   });
+  // Si el rb está vacío (recarga), usar datos del servidor
+  const totalRb = Object.values(catTotales).reduce((s,v)=>s+v,0);
+  if(totalRb===0 && porCategoriaDia.length>0){
+    porCategoriaDia.forEach(pc=>{ catTotales[pc.cat]=(parseInt(pc.qty)||0); });
+  }
   const catEl = document.getElementById('bar-cat-counts');
   if(catEl) catEl.innerHTML = Object.entries(catTotales).filter(([,q])=>q>0).map(([cat,qty])=>`
     <div style="background:rgba(255,255,255,.12);border-radius:10px;padding:5px 12px;text-align:center;min-width:60px">

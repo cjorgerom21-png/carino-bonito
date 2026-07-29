@@ -92,7 +92,8 @@ app.put('/api/cervezas/:id', (req,res) => {
   const precio = parseFloat(req.body.precio)||0;
   const stock = parseInt(req.body.stock)||0;
   const cat = categoria||'Cervezas';
-  run('UPDATE cervezas SET nombre=?,precio=?,stock=?,categoria=? WHERE id=?',[nombre,precio,stock,cat,req.params.id]);
+  const icon = req.body.icon||'🍺';
+  run('UPDATE cervezas SET nombre=?,precio=?,stock=?,categoria=?,icon=? WHERE id=?',[nombre,precio,stock,cat,icon,req.params.id]);
   res.json({ok:true});
 });
 app.delete('/api/cervezas/:id', (req,res) => {

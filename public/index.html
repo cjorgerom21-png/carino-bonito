@@ -1656,7 +1656,7 @@ async function cargarDatos() {
   mostrarToast('⏳ Cargando datos...','ok');
   try {
     const [emps, cervs, plats, mesasApi, resumen] = await Promise.all([
-      api('/empleadas'), api('/cervezas'), api('/platos'), api('/mesas'), api('/dia/resumen?fecha='+fechaLocal())
+      api('/empleadas?fecha='+fechaLocal()), api('/cervezas?fecha='+fechaLocal()), api('/platos?fecha='+fechaLocal()), api('/mesas?fecha='+fechaLocal()), api('/dia/resumen?fecha='+fechaLocal())
     ]);
 
     // Cargar catálogos base

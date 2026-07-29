@@ -686,6 +686,7 @@ tr:hover td{background:var(--blue6)}
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <button class="smbtn ok" onclick="guardarTodosPlatos()">💾 Guardar todos</button>
         <button class="smbtn ok" onclick="aOv('ov-plato')">+ Plato</button>
+        <button class="smbtn danger" onclick="borrarTodosPlatos()">🗑️ Borrar todos</button>
       </div>
     </div>
     <div id="platos-list"></div>
@@ -1712,6 +1713,13 @@ async function cargarDatos() {
       });
     }
 
+    // Restaurar historial del día desde DB
+    if (resumen?.historialDia?.length) {
+      historial = resumen.historialDia.map(h=>({
+        h:h.hora, mesa:h.mesa, tipo:h.tipo, txt:h.txt,
+        monto:parseFloat(h.monto)||0, chica:h.chica, icon:h.icon
+      }));
+    }
     rMesas(); rColGrid(); stats();
     mostrarToast('✅ Datos del día restaurados desde la base de datos','ok');
   } catch(e) {
@@ -1811,16 +1819,17 @@ async function confirmarPedido() {
 async function cobrarMesa() {
   if (!mesaSel) return;
   const mesa = mesas.find(m=>m.id===mesaSel);
-  const r = await api('/pedidos/cobrar-mesa','POST',{mesa_id:mesaSel});
+  const r = await api('/pedidos/cobrar-mesa','POST',{...tsLocal(), mesa_id:mesaSel});
   if (!r) { mostrarToast('⚠️ Error al cobrar','warn'); return; }
 
-  // Armar resumen de lo que se cobró
   const itemsTxt = r.items ? r.items.filter(i=>i.tipo!=='cerveza').map(i=>`${i.nombre}×${i.cantidad}`).join(', ') : '';
   const cervTxt = mesa.totalCerv>0 ? `🍺${mesa.totalCerv}` : '';
   const resumenTxt = [itemsTxt, cervTxt].filter(Boolean).join(' · ') || 'Sin detalle';
-  historial.unshift({h:new Date().toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'}),mesa:mesaSel,tipo:'cobro',txt:resumenTxt,monto:r.total||mesa.total,chica:mesa.chica,icon:'💰'});
-  totalDia += r.total||mesa.total; mesasCob++;
-  totalDia += r.total||mesa.total; mesasCob++;
+  const hEntry={h:horaLocal(),mesa:mesaSel,tipo:'cobro',txt:resumenTxt,monto:r.total||mesa.total,chica:mesa.chica,icon:'💰'};
+  historial.unshift(hEntry);
+  api('/historial','POST',{...tsLocal(),...hEntry});
+  totalDia += r.total||mesa.total;
+  mesasCob++;
   const emp = empleadas.find(e=>e.nombre===mesa.chica);
   if (emp) emp.mesas = emp.mesas.filter(id=>id!==mesaSel);
   Object.assign(mesa,{estado:'libre',chica:null,pedidos:[],cervezas:{},totalCerv:0,total:0});
@@ -2034,9 +2043,11 @@ async function confirmarCobroTurno() {
     mostrarToast(`💵 Cobrado S/ ${cobrado.toFixed(2)} — Pendiente S/ ${queda.toFixed(2)}`);
   }
 
-  historial.unshift({h:r.hora||'--:--', mesa:'Bar', tipo:'cobro',
+  const hEntryT={h:r.hora||'--:--', mesa:'Bar', tipo:'cobro',
     txt:`${esCobradoTotal?'Cierre':'Pago parcial'} ${emp.nombre} · S/ ${cobrado.toFixed(2)}${esCobradoTotal?'':' (parcial)'}`,
-    monto:cobrado, chica:emp.nombre, icon: esCobradoTotal?'💳':'💵'});
+    monto:cobrado, chica:emp.nombre, icon: esCobradoTotal?'💳':'💵'};
+  historial.unshift(hEntryT);
+  api('/historial','POST',{...tsLocal(),...hEntryT});
 
   cOv('ov-cobro-turno');
   stats(); rBarStats();
@@ -2055,6 +2066,14 @@ async function guardarPlato() {
   cOv('ov-plato');
   rPedido(); rConfig();
   mostrarToast('✅ ' + nom + ' guardado — S/' + (parseFloat(precio)||0).toFixed(2));
+}
+
+async function borrarTodosPlatos() {
+  if (!confirm('¿Borrar TODOS los platos del menú?\nEsto los elimina permanentemente de la base de datos.')) return;
+  await api('/platos','DELETE');
+  menu = [];
+  rPedido(); rConfig();
+  mostrarToast('✅ Todos los platos eliminados');
 }
 
 async function elimPlato(id) {

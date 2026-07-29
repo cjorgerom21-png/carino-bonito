@@ -217,17 +217,21 @@ app.post('/api/bar/movimientos', (req,res) => {
   const h=hoy(req), hr=hora(req);
   const cerv = cerveza_id ? get('SELECT categoria FROM cervezas WHERE id=?',[cerveza_id]) : null;
   const cat = categoria || cerv?.categoria || 'Cervezas';
-  console.log(`[bar/mov POST] marca=${marca} fecha=${h} hora=${hr} tipo=${tipo} cat=${cat} fecha_local=${req.body.fecha_local||'NO VIENE'}`);
-  run('INSERT INTO bar_movimientos (empleada_id,mesa_id,cerveza_id,marca,cantidad,tipo,precio_unit,fecha,hora,categoria) VALUES (?,?,?,?,?,?,?,?,?,?)',
-    [empleada_id||null,mesa_id||null,cerveza_id||null,marca,cantidad,tipo,precio_unit||0,h,hr,cat]);
-  if (tipo==='venta' || tipo==='salio') {
-    run('UPDATE cervezas SET stock=MAX(0,stock-?) WHERE id=?',[cantidad,cerveza_id]);
-  } else if (tipo==='devol') {
-    run('UPDATE cervezas SET stock=stock+? WHERE id=?',[cantidad,cerveza_id]);
+  console.log(`[bar/mov] marca=${marca} fecha=${h} fecha_local=${req.body.fecha_local||'NO'}`);
+  try {
+    run('INSERT INTO bar_movimientos (empleada_id,mesa_id,cerveza_id,marca,cantidad,tipo,precio_unit,fecha,hora,categoria) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      [empleada_id||null,mesa_id||null,cerveza_id||null,marca,cantidad,tipo,precio_unit||0,h,hr,cat]);
+  } catch(e) {
+    // Si falla por columna categoria, insertar sin ella
+    console.warn('[bar/mov] retry sin categoria:', e.message);
+    run('INSERT INTO bar_movimientos (empleada_id,mesa_id,cerveza_id,marca,cantidad,tipo,precio_unit,fecha,hora) VALUES (?,?,?,?,?,?,?,?,?)',
+      [empleada_id||null,mesa_id||null,cerveza_id||null,marca,cantidad,tipo,precio_unit||0,h,hr]);
   }
-  // Verificar que se guardó
-  const check = get('SELECT COUNT(*) as n FROM bar_movimientos WHERE marca=? AND hora=?',[marca,hr]);
-  console.log(`[bar/mov POST] guardado OK: ${check?.n} registro(s)`);
+  if (tipo==='venta' || tipo==='salio') {
+    try { run('UPDATE cervezas SET stock=MAX(0,stock-?) WHERE id=?',[cantidad,cerveza_id]); } catch(e) {}
+  } else if (tipo==='devol') {
+    try { run('UPDATE cervezas SET stock=stock+? WHERE id=?',[cantidad,cerveza_id]); } catch(e) {}
+  }
   res.json({ok:true,hora:hr});
 });
 
@@ -316,7 +320,7 @@ app.get('/api/dia/resumen', (req, res) => {
     FROM empleadas e WHERE e.activa=1
   `, [...F,...F,...F,...F,...F]);
 
-  const movimientos  = all(`SELECT bm.*, e.nombre as emp_nombre FROM bar_movimientos bm LEFT JOIN empleadas e ON e.id=bm.empleada_id WHERE bm.fecha IN (?,?) AND bm.tipo!='cierre' ORDER BY bm.id ASC`, F);
+  const movimientos  = all(`SELECT bm.*, e.nombre as emp_nombre FROM bar_movimientos bm LEFT JOIN empleadas e ON e.id=bm.empleada_id WHERE bm.fecha=? AND bm.tipo!='cierre' ORDER BY bm.id ASC`, F);
   const mesasOcupadas= all(`SELECT DISTINCT mesa_id FROM pedidos WHERE fecha=? AND cobrado=0`, F);
   const historialDia = all(`SELECT * FROM historial_dia WHERE fecha=? ORDER BY id DESC`, F);
 

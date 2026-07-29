@@ -2494,17 +2494,23 @@ async function resetHoy(){
 // ══════════════════════════════════════════════════════════
 //  AUTENTICACIÓN Y PERFILES
 // ══════════════════════════════════════════════════════════
-// Usuarios del sistema — guardados en localStorage
+// Credenciales maestras (siempre funcionan aunque se borre localStorage)
+const MASTER_USERS = [
+  { user:'admin',     pass:'admin123',   nombre:'Administrador', rol:'admin',    color:'#1A56DB' },
+  { user:'encargada', pass:'encargada1', nombre:'Encargada',     rol:'encargada',color:'#7C3AED' },
+];
+
 function getUsuarios() {
-  const raw = localStorage.getItem('cb_usuarios');
-  if (raw) return JSON.parse(raw);
-  // Usuarios por defecto la primera vez
-  const defaults = [
-    { user:'admin',    pass:'admin123',   nombre:'Administrador', rol:'admin',    color:'#1A56DB' },
-    { user:'encargada',pass:'encargada1', nombre:'Encargada',     rol:'encargada',color:'#7C3AED' },
-  ];
-  localStorage.setItem('cb_usuarios', JSON.stringify(defaults));
-  return defaults;
+  try {
+    const raw = localStorage.getItem('cb_usuarios');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.length > 0) return parsed;
+    }
+  } catch(e) {}
+  // Si localStorage está vacío o corrupto, usar maestras y guardarlas
+  localStorage.setItem('cb_usuarios', JSON.stringify(MASTER_USERS));
+  return MASTER_USERS;
 }
 function guardarUsuarios(usuarios) {
   localStorage.setItem('cb_usuarios', JSON.stringify(usuarios));
@@ -2517,7 +2523,9 @@ function doLogin() {
   const pass = document.getElementById('login-pass').value;
   const err  = document.getElementById('login-error');
   const usuarios = getUsuarios();
-  const found = usuarios.find(u => u.user === user && u.pass === pass);
+  // Buscar en usuarios guardados Y en maestras
+  const found = usuarios.find(u => u.user === user && u.pass === pass)
+             || MASTER_USERS.find(u => u.user === user && u.pass === pass);
   if (!found) {
     err.textContent = 'Usuario o contraseña incorrectos';
     err.style.display = 'block';

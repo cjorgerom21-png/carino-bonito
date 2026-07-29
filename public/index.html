@@ -1435,12 +1435,13 @@ function rCaja(){
     <td style="color:var(--accent);font-weight:700">${c.vendidas}</td>
     <td>S/${(c.vendidas*c.precio).toFixed(2)}</td>
   </tr>`).join('');
-  document.getElementById('caja-hist').innerHTML=historial.length?historial.map(h=>`
+  const histCaja = historial.filter(h=>h.tipo==='cobro'||h.tipo==='turno');
+  document.getElementById('caja-hist').innerHTML=histCaja.length?histCaja.map(h=>`
     <div class="ch-row">
       <div class="ch-h">${h.h}</div>
       <div class="ch-ico ${h.tipo}">${h.icon}</div>
       <div class="ch-body">
-        <div class="ch-t">Mesa ${h.mesa}${h.chica?' · 👩'+h.chica:''}</div>
+        <div class="ch-t">${h.mesa!=='Bar'&&h.mesa!=='—'?'Mesa '+h.mesa+(h.chica?' · 👩'+h.chica:''):h.chica||h.mesa}</div>
         <div class="ch-s">${h.txt}</div>
       </div>
       ${h.monto>0?`<div class="ch-m">S/${h.monto.toFixed(2)}</div>`:''}
@@ -1460,7 +1461,7 @@ function rConfig(){
         <span style="font-size:11px;color:var(--txt2)">S/</span>
         <input class="price-inp" type="number" id="ppre-${it.id}" value="${it.precio}" min="0" step="0.5" style="width:65px">
         <button class="smbtn ok" onclick="guardarPlato2('${it.id}')">💾 Guardar</button>
-        <button class="del-btn" onclick="if(confirm('¿Eliminar?')){menu=menu.filter(x=>x.id!=='${it.id}');guardarLS();rConfig()}">✕</button>
+        <button class="del-btn" onclick="elimPlato('${it.id}')">✕</button>
       </div>
     </div>`).join('');
   document.getElementById('cfg-cerv').innerHTML=cervezas.map(c=>`<tr>
@@ -1508,11 +1509,7 @@ function cargarLS(){
     if(!raw)return;
     const d=JSON.parse(raw);
     if(d.numMesas) numMesas=d.numMesas;
-    if(d.menu&&d.menu.length) menu=d.menu;
-    if(d.cervezas&&d.cervezas.length) cervezas=d.cervezas.map(c=>({...c,vendidas:c.vendidas||0}));
-    if(d.empleadas&&d.empleadas.length){
-      empleadas=d.empleadas.map(e=>({...e,mesas:[],cervezas:0,ventas:0,rb:[],cobrado:false,horaCobro:null,pendiente:0}));
-    }
+    // NO restaurar menu, cervezas ni empleadas desde localStorage — vienen de la DB
     mesas=mkMesas(numMesas);
   }catch(e){console.warn('Error cargando config:',e);}
 }
@@ -1817,7 +1814,12 @@ async function cobrarMesa() {
   const r = await api('/pedidos/cobrar-mesa','POST',{mesa_id:mesaSel});
   if (!r) { mostrarToast('⚠️ Error al cobrar','warn'); return; }
 
-  historial.unshift({h:new Date().toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'}),mesa:mesaSel,tipo:'cobro',txt:`${mesa.totalCerv} cerv · S/${(r.total||mesa.total).toFixed(2)}`,monto:r.total||mesa.total,chica:mesa.chica,icon:'💰'});
+  // Armar resumen de lo que se cobró
+  const itemsTxt = r.items ? r.items.filter(i=>i.tipo!=='cerveza').map(i=>`${i.nombre}×${i.cantidad}`).join(', ') : '';
+  const cervTxt = mesa.totalCerv>0 ? `🍺${mesa.totalCerv}` : '';
+  const resumenTxt = [itemsTxt, cervTxt].filter(Boolean).join(' · ') || 'Sin detalle';
+  historial.unshift({h:new Date().toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'}),mesa:mesaSel,tipo:'cobro',txt:resumenTxt,monto:r.total||mesa.total,chica:mesa.chica,icon:'💰'});
+  totalDia += r.total||mesa.total; mesasCob++;
   totalDia += r.total||mesa.total; mesasCob++;
   const emp = empleadas.find(e=>e.nombre===mesa.chica);
   if (emp) emp.mesas = emp.mesas.filter(id=>id!==mesaSel);
@@ -2053,6 +2055,14 @@ async function guardarPlato() {
   cOv('ov-plato');
   rPedido(); rConfig();
   mostrarToast('✅ ' + nom + ' guardado — S/' + (parseFloat(precio)||0).toFixed(2));
+}
+
+async function elimPlato(id) {
+  if (!confirm('¿Eliminar este plato?')) return;
+  await api('/platos/'+id, 'DELETE');
+  menu = menu.filter(x=>String(x.id)!==String(id));
+  rPedido(); rConfig();
+  mostrarToast('✅ Plato eliminado');
 }
 
 async function guardarPlato2(id) {

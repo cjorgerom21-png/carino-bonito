@@ -67,7 +67,7 @@ app.delete('/api/empleadas/:id', (req,res) => {
 // ── CERVEZAS ─────────────────────────────────────────────
 app.get('/api/cervezas', (_,res) => {
   const rows = all('SELECT * FROM cervezas WHERE activa=1 ORDER BY id');
-  const h = hoy();
+  const h = hoy(req);
   rows.forEach(c => {
     c.precio = parseFloat(c.precio)||0;
     c.stock  = parseInt(c.stock)||0;
@@ -127,7 +127,7 @@ app.delete('/api/platos/:id', (req,res) => {
 // ── MESAS ────────────────────────────────────────────────
 app.get('/api/mesas', (_,res) => {
   const mesas = all('SELECT m.*, e.nombre as empleada_nombre, e.color as empleada_color FROM mesas m LEFT JOIN empleadas e ON e.id=m.empleada_id ORDER BY m.id');
-  const h = hoy();
+  const h = hoy(req);
   mesas.forEach(m => {
     const peds = all('SELECT total FROM pedidos WHERE mesa_id=? AND fecha=? AND cobrado=0',[m.id,h]);
     m.total = peds.reduce((s,p)=>s+(p.total||0),0);
@@ -261,7 +261,8 @@ app.get('/api/analytics', (req,res) => {
 
 // ── RESUMEN DEL DÍA ──────────────────────────────────────
 app.get('/api/dia/resumen', (req, res) => {
-  const h = hoy();
+  // Usar fecha del query param si viene, si no usar TZ de Lima
+  const h = req.query.fecha || hoy(req);
   const cajaDia    = get(`SELECT COALESCE(SUM(total),0) as t, COUNT(DISTINCT mesa_id) as m FROM pedidos WHERE fecha=? AND cobrado=1`, [h]);
   // Sumar cobros de turno del bar al totalDia
   run(`CREATE TABLE IF NOT EXISTS cobros_turno (id INTEGER PRIMARY KEY AUTOINCREMENT, empleada_id INTEGER, total REAL DEFAULT 0, cervezas INTEGER DEFAULT 0, fecha TEXT, hora TEXT, parcial INTEGER DEFAULT 0)`);
@@ -333,14 +334,14 @@ app.delete('/api/pedidos/:id', (req, res) => {
   run('DELETE FROM pedido_items WHERE pedido_id=?', [req.params.id]);
   run('DELETE FROM pedidos WHERE id=?', [req.params.id]);
   // Si no quedan pedidos en la mesa, liberarla
-  const resto = get('SELECT COUNT(*) as n FROM pedidos WHERE mesa_id=? AND cobrado=0 AND fecha=?', [pedido.mesa_id, hoy()]);
+  const resto = get('SELECT COUNT(*) as n FROM pedidos WHERE mesa_id=? AND cobrado=0 AND fecha=?', [pedido.mesa_id, hoy(req)]);
   if ((resto?.n || 0) === 0) run("UPDATE mesas SET estado='libre', empleada_id=NULL WHERE id=?", [pedido.mesa_id]);
   res.json({ ok: true, total_restado: pedido.total, mesa_id: pedido.mesa_id });
 });
 
 // ── PEDIDOS DE UNA MESA (lista completa) ─────────────────
 app.get('/api/mesas/:id/pedidos', (req, res) => {
-  const h = hoy();
+  const h = hoy(req);
   const pedidos = all(`
     SELECT p.*, e.nombre as emp_nombre
     FROM pedidos p LEFT JOIN empleadas e ON e.id=p.empleada_id
@@ -354,7 +355,7 @@ app.get('/api/mesas/:id/pedidos', (req, res) => {
 
 // ── DETALLE DE MESA ──────────────────────────────────────
 app.get('/api/mesas/:id/detalle', (req, res) => {
-  const h = hoy();
+  const h = hoy(req);
   const mesa = get('SELECT m.*, e.nombre as emp_nombre FROM mesas m LEFT JOIN empleadas e ON e.id=m.empleada_id WHERE m.id=?', [req.params.id]);
   const pedidos = all('SELECT * FROM pedidos WHERE mesa_id=? AND fecha=? AND cobrado=0 ORDER BY id', [req.params.id, h]);
   const items = [];
@@ -375,7 +376,7 @@ app.get('/api/mesas/:id/detalle', (req, res) => {
 
 // ── RESET DÍA ────────────────────────────────────────────
 app.delete('/api/dia/reset', (req, res) => {
-  const h = hoy();
+  const h = hoy(req);
   try {
     const pedidosHoy = all('SELECT id FROM pedidos WHERE fecha=?', [h]);
     pedidosHoy.forEach(p => run('DELETE FROM pedido_items WHERE pedido_id=?', [p.id]));

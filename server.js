@@ -388,6 +388,40 @@ app.get('/api/mesas/:id/detalle', (req, res) => {
   res.json({ mesa, items: Object.values(agrupado), total, num_pedidos: pedidos.length });
 });
 
+// ── FECHAS DISPONIBLES ───────────────────────────────────
+app.get('/api/fechas', (req, res) => {
+  const fechas = all(`
+    SELECT fecha, COUNT(*) as pedidos, SUM(total) as total
+    FROM pedidos WHERE cobrado=1 GROUP BY fecha ORDER BY fecha DESC LIMIT 30
+  `);
+  const barFechas = all(`
+    SELECT fecha, COUNT(*) as movimientos, SUM(cantidad*precio_unit) as total
+    FROM bar_movimientos WHERE tipo IN ('venta','salio','manual') GROUP BY fecha ORDER BY fecha DESC LIMIT 30
+  `);
+  res.json({ fechas, barFechas });
+});
+
+// ── RESUMEN DE FECHA ESPECÍFICA ───────────────────────────
+app.get('/api/dia/resumen/fecha/:fecha', (req, res) => {
+  const h = req.params.fecha;
+  const cajaDia  = get(`SELECT COALESCE(SUM(total),0) as t, COUNT(DISTINCT mesa_id) as m FROM pedidos WHERE fecha=? AND cobrado=1`,[h]);
+  const menuDia  = get(`SELECT COALESCE(SUM(pi.subtotal),0) as t FROM pedido_items pi JOIN pedidos p ON p.id=pi.pedido_id WHERE p.fecha=? AND pi.tipo!='cerveza' AND p.cobrado=1`,[h]);
+  const cobrosBar= get(`SELECT COALESCE(SUM(total),0) as t FROM cobros_turno WHERE fecha=?`,[h]);
+  const cervsDia = get(`SELECT COALESCE(SUM(cantidad),0) as t FROM bar_movimientos WHERE fecha=? AND tipo IN ('venta','salio','manual')`,[h]);
+  const cervsDevol=get(`SELECT COALESCE(SUM(cantidad),0) as t FROM bar_movimientos WHERE fecha=? AND tipo='devol'`,[h]);
+  const porCerveza=all(`SELECT marca as nombre, SUM(cantidad) as vendidas, SUM(cantidad*precio_unit) as ingresos FROM bar_movimientos WHERE fecha=? AND tipo IN ('venta','salio','manual') GROUP BY marca ORDER BY vendidas DESC`,[h]);
+  const porEmpBar =all(`SELECT e.nombre, SUM(bm.cantidad) as cervezas, SUM(bm.cantidad*bm.precio_unit) as ventas_bar FROM bar_movimientos bm JOIN empleadas e ON e.id=bm.empleada_id WHERE bm.fecha=? AND bm.tipo IN ('venta','salio','manual') GROUP BY e.id`,[h]);
+  const pedidosEmp=all(`SELECT e.nombre, SUM(p.total) as ventas_mesa FROM pedidos p JOIN empleadas e ON e.id=p.empleada_id WHERE p.fecha=? AND p.cobrado=1 GROUP BY e.id`,[h]);
+  res.json({
+    fecha: h,
+    totalDia: (cajaDia?.t||0)+(cobrosBar?.t||0),
+    mesasCob: cajaDia?.m||0,
+    totalCervG: Math.max(0,(cervsDia?.t||0)-(cervsDevol?.t||0)),
+    totalMenu: menuDia?.t||0,
+    porCerveza, porEmpBar, pedidosEmp
+  });
+});
+
 // ── RESET DÍA ────────────────────────────────────────────
 app.delete('/api/dia/reset', (req, res) => {
   const h = hoy(req);

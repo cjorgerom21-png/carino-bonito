@@ -1255,28 +1255,31 @@ function rBarCards(){
 
 // Actualización ligera: solo actualiza números y registros SIN tocar controles
 function rBarStats(){
-  // Total = suma de todas las categorías desde rb local (siempre actualizado)
-  const totalCats = Object.values(catTotales).reduce((s,v)=>s+Math.max(0,v),0);
-  // Fallback: usar servidor si rb está vacío  
-  const totalServidor = porCategoriaDia.reduce((s,p)=>s+(parseInt(p.qty)||0),0);
-  document.getElementById('bar-big').textContent = totalCats || totalServidor || totalCervG;
+  // Total header — siempre desde rb local (fuente de verdad)
+  let totalHoy = 0;
+  empleadas.forEach(e => e.rb.forEach(r => {
+    if(r.tipo==='devol') totalHoy -= r.qty;
+    else totalHoy += r.qty;
+  }));
+  if(totalHoy <= 0) totalHoy = porCategoriaDia.reduce((s,p)=>s+(parseInt(p.qty)||0),0);
+  if(totalHoy <= 0) totalHoy = totalCervG;
+  document.getElementById('bar-big').textContent = Math.max(0, totalHoy);
 
-  // Contadores por categoría — servidor como base + rb local en tiempo real
+  // Contadores por categoría
   const catTotales = {};
   const catIcons = {Cervezas:'🍺',Gaseosas:'🥤',Jugos:'🧃',Bebidas:'💧',Licores:'🍾',Cigarros:'🚬',Snacks:'🍿',Dulces:'🍬',Otros:'📦'};
-  // Siempre calcular desde rb local (fuente de verdad en tiempo real)
+  // Calcular desde rb local
   empleadas.forEach(e=>{
     e.rb.forEach(r=>{
       const cv = cervezas.find(x=>x.nombre===r.marca);
       const cat = cv?.categoria||cv?.cat||'Cervezas';
-      if(r.tipo==='devol') catTotales[cat]=(catTotales[cat]||0)-r.qty;
-      else catTotales[cat]=(catTotales[cat]||0)+r.qty;
+      catTotales[cat] = (catTotales[cat]||0) + (r.tipo==='devol' ? -r.qty : r.qty);
     });
   });
-  // Si el rb está vacío (recarga), usar datos del servidor
+  // Si rb está vacío, usar datos del servidor
   const totalRb = Object.values(catTotales).reduce((s,v)=>s+v,0);
-  if(totalRb===0 && porCategoriaDia.length>0){
-    porCategoriaDia.forEach(pc=>{ catTotales[pc.cat]=(parseInt(pc.qty)||0); });
+  if(totalRb === 0 && porCategoriaDia.length > 0){
+    porCategoriaDia.forEach(p=>{ catTotales[p.cat] = Math.max(0, parseInt(p.qty)||0); });
   }
   const catEl = document.getElementById('bar-cat-counts');
   if(catEl) catEl.innerHTML = Object.entries(catTotales).filter(([,q])=>q>0).map(([cat,qty])=>`
@@ -1837,25 +1840,12 @@ async function cargarDatos() {
       }));
     }
     rMesas(); rColGrid(); stats();
-    // Forzar render del registro de movimientos del bar (siempre visible en DOM)
-    setTimeout(() => {
-      rBarCards();
-      // Render bar-hist directamente
-      const allMovs = empleadas.flatMap(e=>e.rb.map(r=>({...r,emp:e.nombre,col:e.color}))).sort((a,b)=>b.h.localeCompare(a.h));
-      const elHist = document.getElementById('bar-hist');
-      if(elHist) elHist.innerHTML = allMovs.length ? allMovs.slice(0,60).map(r=>{
-        const cv = cervezas.find(x=>x.nombre===r.marca);
-        return `<tr>
-          <td style="color:var(--txt2);font-size:10px">${r.fecha||fechaLocal()}</td>
-          <td>${r.h}</td>
-          <td><span style="background:${r.col||'#93C5FD'};border-radius:99px;padding:1px 8px;font-size:10px;font-weight:600;color:#1e3a5f">${r.emp}</span></td>
-          <td>${r.mesa?'Mesa '+r.mesa:'Bar'}</td>
-          <td>${r.marca}</td>
-          <td style="font-weight:700;color:${r.tipo==='devol'?'var(--roj)':'var(--vrd)'}">${r.tipo==='devol'?'−':'+'}${r.qty}</td>
-          <td>${r.tipo==='devol'?'—':'S/'+(r.qty*(cv?cv.precio:0)).toFixed(2)}</td>
-        </tr>`;
-      }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--txt2);padding:14px">Sin movimientos</td></tr>';
-    }, 100);
+    // Actualizar header del BAR con datos del servidor
+    setTimeout(() => rBarStats(), 50);
+    // Render completo si BAR está activo
+    if (document.getElementById('sec-bar')?.classList.contains('active')) {
+      setTimeout(() => rBar(), 100);
+    }
     mostrarToast('✅ Datos del día restaurados desde la base de datos','ok');
   } catch(e) {
     console.error(e);

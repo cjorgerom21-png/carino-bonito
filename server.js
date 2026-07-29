@@ -287,9 +287,9 @@ app.get('/api/dia/resumen', (req, res) => {
     WHERE bm.fecha=? ORDER BY bm.id ASC
   `, [h]);
   const mesasOcupadas = all(`SELECT DISTINCT mesa_id FROM pedidos WHERE fecha=? AND cobrado=0`, [h]);
-  res.json({
   run('CREATE TABLE IF NOT EXISTS historial_dia (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT, hora TEXT, mesa TEXT, tipo TEXT, txt TEXT, monto REAL DEFAULT 0, chica TEXT, icon TEXT)');
   const historialDia = all('SELECT * FROM historial_dia WHERE fecha=? ORDER BY id DESC', [h]);
+  res.json({
 
     totalDia: (cajaDia?.t || 0) + (cobrosBar?.t || 0),
     mesasCob: cajaDia?.m || 0,

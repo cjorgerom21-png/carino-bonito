@@ -848,6 +848,7 @@ let cervezas=[];
 let menu=[];
 let mesaSel=null,pedidoActual={},historial=[];
 let totalDia=0,mesasCob=0,totalCervG=0,totalMenu=0;
+let porCervezaDia=[];
 let editEmpId=null,colorSel=COLS[0];
 const barSt={};
 
@@ -1458,10 +1459,15 @@ function rCaja(){
     <td>S/${(e.ventas-e.cervezas*0).toFixed(0)}</td>
     <td><strong>S/${e.ventas.toFixed(2)}</strong></td>
   </tr>`).join(''):'<tr><td colspan="4" style="text-align:center;color:var(--txt2)">Sin datos</td></tr>';
-  document.getElementById('cj-cerv-b').innerHTML=cervezas.map(c=>`<tr>
-    <td>${c.icon} ${c.nombre}</td>
-    <td style="color:var(--accent);font-weight:700">${c.vendidas}</td>
-    <td>S/${(c.vendidas*c.precio).toFixed(2)}</td>
+  // Tabla por marca — combinar catálogo con datos reales del día
+  const marcasHoy = cervezas.map(c => {
+    const dato = porCervezaDia.find(x=>x.nombre===c.nombre)||{vendidas:0,ingresos:0};
+    return {...c, vendidas: parseInt(dato.vendidas)||0, ingresos: parseFloat(dato.ingresos)||0};
+  });
+  document.getElementById('cj-cerv-b').innerHTML=marcasHoy.map(c=>`<tr>
+    <td>${c.icon||'🍺'} ${c.nombre}</td>
+    <td style="color:${c.vendidas>0?'var(--accent)':'var(--txt2)'};font-weight:700">${c.vendidas}</td>
+    <td>S/${c.ingresos.toFixed(2)}</td>
   </tr>`).join('');
   const histCaja = historial.filter(h=>h.tipo==='cobro'||h.tipo==='turno');
   document.getElementById('caja-hist').innerHTML=histCaja.length?histCaja.map(h=>`
@@ -1725,6 +1731,7 @@ async function cargarDatos() {
       mesasCob   = parseInt(resumen.mesasCob)      || 0;
       totalCervG = parseInt(resumen.totalCervG)    || 0;
       totalMenu  = parseFloat(resumen.totalMenu)   || 0;
+      porCervezaDia = resumen.porCerveza || [];
     }
 
     // Cargar empleadas con estado real del día
@@ -2068,6 +2075,10 @@ async function bReg(eid, tipo) {
   if (tipo==='salio') {
     emp.cervezas += qty;
     c.vendidas = (c.vendidas||0) + qty;
+    // Actualizar porCervezaDia para rCaja
+    const pcd=porCervezaDia.find(x=>x.nombre===c.nombre);
+    if(pcd){pcd.vendidas=(parseInt(pcd.vendidas)||0)+qty;pcd.ingresos=(parseFloat(pcd.ingresos)||0)+qty*(parseFloat(c.precio)||0);}
+    else porCervezaDia.push({nombre:c.nombre,vendidas:qty,ingresos:qty*(parseFloat(c.precio)||0)});
     totalCervG += qty;
     emp.rb.unshift({h:horaStr, marca:c.nombre, qty, tipo:'salio', mesa:null});
     historial.unshift({h:horaStr,mesa:'Bar',tipo:'bar',txt:`${emp.nombre} → ${qty}× ${c.nombre}`,monto:qty*precioReal,chica:emp.nombre,icon:'🍺'});

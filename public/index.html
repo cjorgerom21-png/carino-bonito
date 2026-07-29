@@ -782,7 +782,8 @@ tr:hover td{background:var(--blue6)}
   <div class="mod" style="max-width:520px">
     <div class="mod-t" id="ov-pm-title">📋 Pedidos — Mesa</div>
     <div id="ov-pm-body" style="max-height:420px;overflow-y:auto"></div>
-    <div style="display:flex;justify-content:flex-end;margin-top:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px">
+      <button onclick="limpiarTodaMesa(${mesaId})" style="padding:9px 16px;border-radius:9px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;font-size:13px;font-weight:700;cursor:pointer">🗑️ Eliminar todos</button>
       <button class="btn bd" onclick="cOv('ov-pedidos-mesa')">Cerrar</button>
     </div>
   </div>
@@ -868,6 +869,18 @@ function rMesas(){
   stats();
 }
 function irP(id){mesaSel=id;pedidoActual={};T('pedido');}
+
+async function limpiarTodaMesa(mesaId) {
+  if (!confirm(`¿Eliminar TODOS los pedidos de Mesa ${mesaId}?\nLa mesa quedará libre y el monto se restará de caja.`)) return;
+  const r = await api('/mesas/'+mesaId+'/pedidos', 'DELETE');
+  if (!r) { mostrarToast('⚠️ Error al limpiar mesa','warn'); return; }
+  totalDia = Math.max(0, totalDia - (r.total_restado||0));
+  const mesa = mesas.find(m=>m.id===mesaId);
+  if (mesa) Object.assign(mesa, {estado:'libre', chica:null, total:0, totalCerv:0});
+  cOv('ov-pedidos-mesa');
+  stats(); rMesas();
+  mostrarToast(`🗑️ Mesa ${mesaId} limpiada · S/${(r.total_restado||0).toFixed(2)} restado de caja`);
+}
 
 async function verPedidosMesa(mesaId, e) {
   if(e) e.stopPropagation();
@@ -1682,6 +1695,7 @@ async function cargarDatos() {
     if (emps) {
       empleadas = emps.map(e => {
         const ed = resumen?.porEmp?.find(x=>x.id===e.id) || {};
+        const cobroEmp = (resumen?.cobrosEmp||[]).find(x=>x.empleada_id===e.id);
         const movs = (resumen?.movimientos||[])
           .filter(m=>m.empleada_id===e.id)
           .map(m=>({h:m.hora, marca:m.marca, qty:m.cantidad, tipo:m.tipo, mesa:m.mesa_id}))
@@ -1694,9 +1708,9 @@ async function cargarDatos() {
           cervezas: Math.max(0, ed.cervezas||0),
           ventas:   (ed.ventas_mesa||0) + (ed.ventas_bar||0),
           rb:       movs,
-          cobrado:  false,
-          horaCobro: null,
-          pendiente: 0
+          cobrado:  cobroEmp?.tiene_cierre === 1,
+          horaCobro: cobroEmp?.ultima_hora || null,
+          pendiente: parseFloat(cobroEmp?.total_cobrado||0)
         };
       });
     }

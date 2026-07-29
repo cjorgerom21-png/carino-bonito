@@ -1241,8 +1241,9 @@ function rBarCards(){
 
 // Actualización ligera: solo actualiza números y registros SIN tocar controles
 function rBarStats(){
-  // Header stats
-  document.getElementById('bar-big').textContent=totalCervG;
+  // Header stats — total = suma de TODAS las categorías
+  const totalTodas = porCategoriaDia.reduce((s,p)=>s+(parseInt(p.qty)||0),0) || totalCervG;
+  document.getElementById('bar-big').textContent = totalTodas || totalCervG;
 
   // Contadores por categoría — desde servidor (preciso) + rb local (tiempo real)
   const catTotales = {};

@@ -2379,6 +2379,10 @@ function abrirModalCerv(editId=null){
       document.getElementById('mc-nom').value=(c.nombre||'');
       document.getElementById('mc-precio').value=(parseFloat(c.precio)||0).toFixed(2);
       document.getElementById('mc-stock').value=(c.stock||0);
+      const catEl=document.getElementById('mc-cat');
+      if(catEl) catEl.value=c.categoria||c.cat||'Cervezas';
+      const icoEl=document.getElementById('mc-icon');
+      if(icoEl) icoEl.value=c.icon||'🍺';
     }
   }
   aOv('ov-cerv');
@@ -2405,7 +2409,7 @@ async function guardarCervMarca() {
   errEl.style.display='none';
 
   if(editId){
-    await api('/cervezas/'+editId,'PUT',{nombre:nom,precio,stock,categoria:cat});
+    await api('/cervezas/'+editId,'PUT',{nombre:nom,precio,stock,categoria:cat,icon});
     const c=cervezas.find(x=>String(x.id)===String(editId));
     if(c){ c.nombre=nom; c.precio=precio; c.stock=stock; c.icon=icon; c.cat=cat; c.categoria=cat; }
     mostrarToast('✅ '+nom+' actualizado — S/'+precio.toFixed(2));

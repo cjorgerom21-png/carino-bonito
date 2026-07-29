@@ -70,8 +70,10 @@ app.get('/api/cervezas', (req,res) => {
   const rows = all('SELECT * FROM cervezas WHERE activa=1 ORDER BY id');
   const h = hoy(req);
   rows.forEach(c => {
-    c.precio = parseFloat(c.precio)||0;
-    c.stock  = parseInt(c.stock)||0;
+    c.precio     = parseFloat(c.precio)||0;
+    c.stock      = parseInt(c.stock)||0;
+    c.icon       = c.icon || '🍺';
+    c.categoria  = c.categoria || 'Cervezas';
     const out = get('SELECT COALESCE(SUM(cantidad),0) as v FROM bar_movimientos WHERE cerveza_id=? AND tipo!=? AND fecha=?',[c.id,'devol',h]);
     const dev = get('SELECT COALESCE(SUM(cantidad),0) as v FROM bar_movimientos WHERE cerveza_id=? AND tipo=? AND fecha=?',[c.id,'devol',h]);
     const ped = get('SELECT COALESCE(SUM(cantidad),0) as v FROM pedido_items pi JOIN pedidos p ON p.id=pi.pedido_id WHERE pi.marca=? AND pi.tipo=? AND p.fecha=?',[c.nombre,'cerveza',h]);

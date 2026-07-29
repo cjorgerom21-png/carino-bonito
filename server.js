@@ -264,42 +264,47 @@ app.get('/api/analytics', (req,res) => {
 // ── RESUMEN DEL DÍA ──────────────────────────────────────
 app.get('/api/dia/resumen', (req, res) => {
   const h = req.query.fecha || hoy(req);
-  // SIN filtro de fecha en pedidos — usar cobrado=0/1 como fuente de verdad
-  // Los pedidos cobrados del día se detectan via historial_dia
-  const cajaDia = get(`SELECT COALESCE(SUM(total),0) as t, COUNT(DISTINCT mesa_id) as m FROM pedidos WHERE cobrado=1`);
+  // Rango hoy+ayer para cubrir desfase UTC (máx 1 día)
+  const ayer = new Date(new Date(h+'T12:00:00').getTime()-86400000).toISOString().split('T')[0];
+  const F = [h, ayer]; // fechas válidas del día
+
   run(`CREATE TABLE IF NOT EXISTS cobros_turno (id INTEGER PRIMARY KEY AUTOINCREMENT, empleada_id INTEGER, total REAL DEFAULT 0, cervezas INTEGER DEFAULT 0, fecha TEXT, hora TEXT, parcial INTEGER DEFAULT 0)`);
+  try { run(`ALTER TABLE cobros_turno ADD COLUMN parcial INTEGER DEFAULT 0`); } catch(e) {}
   run(`CREATE TABLE IF NOT EXISTS historial_dia (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT, hora TEXT, mesa TEXT, tipo TEXT, txt TEXT, monto REAL DEFAULT 0, chica TEXT, icon TEXT)`);
-  // Cobros de turno y movimientos bar sí usan fecha (guardados con fecha_local del cliente)
-  // Usamos rango amplio: hoy y ayer por si hay desfase UTC
-  const ayer = new Date(new Date(h+'T12:00:00').getTime() - 86400000).toISOString().split('T')[0];
-  const fechas = [h, ayer];
-  const cobrosBar = get(`SELECT COALESCE(SUM(total),0) as t FROM cobros_turno WHERE fecha IN (?,?)`, fechas);
-  const cobrosEmp = all(`SELECT empleada_id, SUM(total) as total_cobrado, MAX(hora) as ultima_hora, MAX(CASE WHEN parcial=0 THEN 1 ELSE 0 END) as tiene_cierre FROM cobros_turno WHERE fecha IN (?,?) GROUP BY empleada_id`, [...fechas]);
-  const cervsDia  = get(`SELECT COALESCE(SUM(cantidad),0) as t FROM bar_movimientos WHERE fecha IN (?,?) AND tipo IN ('venta','salio','manual')`, fechas);
-  const cervsDevol= get(`SELECT COALESCE(SUM(cantidad),0) as t FROM bar_movimientos WHERE fecha IN (?,?) AND tipo='devol'`, fechas);
-  const menuDia   = get(`SELECT COALESCE(SUM(pi.subtotal),0) as t FROM pedido_items pi JOIN pedidos p ON p.id=pi.pedido_id WHERE pi.tipo!='cerveza' AND p.cobrado=1`);
+
+  // Pedidos: filtrar por fecha guardada en el pedido (fecha_local del cliente)
+  const cajaDia  = get(`SELECT COALESCE(SUM(total),0) as t, COUNT(DISTINCT mesa_id) as m FROM pedidos WHERE fecha IN (?,?) AND cobrado=1`, F);
+  const menuDia  = get(`SELECT COALESCE(SUM(pi.subtotal),0) as t FROM pedido_items pi JOIN pedidos p ON p.id=pi.pedido_id WHERE p.fecha IN (?,?) AND pi.tipo!='cerveza' AND p.cobrado=1`, F);
+  const cobrosBar= get(`SELECT COALESCE(SUM(total),0) as t FROM cobros_turno WHERE fecha IN (?,?)`, F);
+  const cobrosEmp= all(`SELECT empleada_id, SUM(total) as total_cobrado, MAX(hora) as ultima_hora, MAX(CASE WHEN parcial=0 THEN 1 ELSE 0 END) as tiene_cierre FROM cobros_turno WHERE fecha IN (?,?) GROUP BY empleada_id`, F);
+  const cervsDia = get(`SELECT COALESCE(SUM(cantidad),0) as t FROM bar_movimientos WHERE fecha IN (?,?) AND tipo IN ('venta','salio','manual')`, F);
+  const cervsDevol=get(`SELECT COALESCE(SUM(cantidad),0) as t FROM bar_movimientos WHERE fecha IN (?,?) AND tipo='devol'`, F);
+
+  // Por cerveza vendida hoy
+  const porCerveza = all(`SELECT marca as nombre, SUM(cantidad) as vendidas, SUM(cantidad*precio_unit) as ingresos FROM bar_movimientos WHERE fecha IN (?,?) AND tipo IN ('venta','salio','manual') GROUP BY marca`, F);
+
   const porEmp = all(`
     SELECT e.id, e.nombre,
-      COALESCE((SELECT SUM(bm.cantidad) FROM bar_movimientos bm WHERE bm.empleada_id=e.id AND bm.fecha IN (?,?) AND bm.tipo!='devol'),0) -
+      COALESCE((SELECT SUM(bm.cantidad) FROM bar_movimientos bm WHERE bm.empleada_id=e.id AND bm.fecha IN (?,?) AND bm.tipo IN ('venta','salio','manual')),0) -
       COALESCE((SELECT SUM(bm.cantidad) FROM bar_movimientos bm WHERE bm.empleada_id=e.id AND bm.fecha IN (?,?) AND bm.tipo='devol'),0) as cervezas,
-      COALESCE((SELECT SUM(p.total) FROM pedidos p WHERE p.empleada_id=e.id AND p.cobrado=0),0) as ventas_mesa,
-      COALESCE((SELECT SUM(bm.cantidad*bm.precio_unit) FROM bar_movimientos bm WHERE bm.empleada_id=e.id AND bm.fecha IN (?,?) AND bm.tipo!='devol'),0) -
+      COALESCE((SELECT SUM(p.total) FROM pedidos p WHERE p.empleada_id=e.id AND p.fecha IN (?,?) AND p.cobrado=0),0) as ventas_mesa,
+      COALESCE((SELECT SUM(bm.cantidad*bm.precio_unit) FROM bar_movimientos bm WHERE bm.empleada_id=e.id AND bm.fecha IN (?,?) AND bm.tipo IN ('venta','salio','manual')),0) -
       COALESCE((SELECT SUM(bm.cantidad*bm.precio_unit) FROM bar_movimientos bm WHERE bm.empleada_id=e.id AND bm.fecha IN (?,?) AND bm.tipo='devol'),0) as ventas_bar
     FROM empleadas e WHERE e.activa=1
-  `, [...fechas,...fechas,...fechas,...fechas]);
-  const movimientos = all(`SELECT bm.*, e.nombre as emp_nombre FROM bar_movimientos bm LEFT JOIN empleadas e ON e.id=bm.empleada_id WHERE bm.fecha IN (?,?) AND bm.tipo!='cierre' ORDER BY bm.id ASC`, fechas);
-  const mesasOcupadas = all(`SELECT DISTINCT mesa_id FROM pedidos WHERE cobrado=0`);
-  const historialDia = all(`SELECT * FROM historial_dia WHERE fecha IN (?,?) ORDER BY id DESC`, fechas);
+  `, [...F,...F,...F,...F,...F]);
+
+  const movimientos  = all(`SELECT bm.*, e.nombre as emp_nombre FROM bar_movimientos bm LEFT JOIN empleadas e ON e.id=bm.empleada_id WHERE bm.fecha IN (?,?) AND bm.tipo!='cierre' ORDER BY bm.id ASC`, F);
+  const mesasOcupadas= all(`SELECT DISTINCT mesa_id FROM pedidos WHERE fecha IN (?,?) AND cobrado=0`, F);
+  const historialDia = all(`SELECT * FROM historial_dia WHERE fecha IN (?,?) ORDER BY id DESC`, F);
+
   res.json({
-    totalDia: (cajaDia?.t || 0) + (cobrosBar?.t || 0),
-    mesasCob: cajaDia?.m || 0,
-    totalCervG: Math.max(0, (cervsDia?.t||0) - (cervsDevol?.t||0)),
-    totalMenu: menuDia?.t || 0,
-    porEmp,
-    movimientos,
+    totalDia:   (cajaDia?.t||0) + (cobrosBar?.t||0),
+    mesasCob:   cajaDia?.m||0,
+    totalCervG: Math.max(0,(cervsDia?.t||0)-(cervsDevol?.t||0)),
+    totalMenu:  menuDia?.t||0,
+    porEmp, porCerveza, movimientos,
     mesasOcupadas: mesasOcupadas.map(m=>m.mesa_id),
-    cobrosEmp,
-    historialDia
+    cobrosEmp, historialDia
   });
 });
 

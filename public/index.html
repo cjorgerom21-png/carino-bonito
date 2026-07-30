@@ -2481,11 +2481,14 @@ async function guardarCerv2(id) {
   const nom = document.getElementById('cnom-'+id)?.value.trim();
   const pre = parseFloat(document.getElementById('cpre-'+id)?.value)||0;
   const stk = parseInt(document.getElementById('cstk-'+id)?.value)||0;
-  await api('/cervezas/'+id,'PUT',{nombre:nom,precio:pre,stock:stk});
   const c = cervezas.find(x=>String(x.id)===String(id));
-  if (c) { c.nombre=nom||c.nombre; c.precio=parseFloat(pre)||0; c.stock=parseInt(stk)||0; }
-  rPedido(); // refrescar pedido con nuevo precio
-  mostrarToast('✅ ' + (nom||'Cerveza') + ' — S/' + (parseFloat(pre)||0).toFixed(2));
+  // Preservar categoría e ícono existentes
+  const cat  = c?.categoria || c?.cat || 'Cervezas';
+  const icon = c?.icon || '🍺';
+  await api('/cervezas/'+id,'PUT',{nombre:nom,precio:pre,stock:stk,categoria:cat,icon});
+  if (c) { c.nombre=nom||c.nombre; c.precio=pre; c.stock=stk; }
+  rPedido();
+  mostrarToast('✅ ' + (nom||'Producto') + ' — S/' + pre.toFixed(2));
 }
 
 async function guardarTodasCervezas() {
@@ -2496,9 +2499,14 @@ async function guardarTodasCervezas() {
     if (ni) c.nombre = ni.value.trim()||c.nombre;
     if (pi) c.precio = parseFloat(pi.value)||0;
     if (si) c.stock  = parseInt(si.value)||0;
-    await api('/cervezas/'+c.id,'PUT',{nombre:c.nombre,precio:c.precio,stock:c.stock});
+    // Siempre enviar categoria e icon para no resetearlos
+    await api('/cervezas/'+c.id,'PUT',{
+      nombre:c.nombre, precio:c.precio, stock:c.stock,
+      categoria: c.categoria||c.cat||'Cervezas',
+      icon: c.icon||'🍺'
+    });
   }
-  mostrarToast('✅ Todas las cervezas guardadas');
+  mostrarToast('✅ Todos los productos guardados');
   if (document.getElementById('sec-bar').classList.contains('active')) rBar();
 }
 

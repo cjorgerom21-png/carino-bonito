@@ -199,13 +199,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .cc{display:flex;align-items:center;gap:4px;background:var(--accent2);border-radius:7px;padding:3px 8px;font-size:11px;font-weight:600;color:#92400E;margin-top:6px;width:fit-content}
 
 /* PEDIDO */
-.pl{display:grid;grid-template-columns:1fr 1fr 280px;gap:12px;align-items:start}
-@media(max-width:900px){.pl{grid-template-columns:1fr 260px}.col-menu2{display:none}}
-/* Tabs de pedido para móvil */
-.ped-tabs{display:none;gap:0;margin-bottom:10px;border-radius:10px;overflow:hidden;border:1.5px solid var(--brd)}
-.ped-tab{flex:1;padding:10px 4px;font-size:12px;font-weight:700;border:none;cursor:pointer;background:var(--sf);color:var(--txt2);transition:all .15s;text-align:center}
-.ped-tab.active{background:var(--blue2);color:#fff}
-@media(max-width:640px){
+.pl{display:grid;grid-template-columns:1fr 1fr 300px;gap:14px;align-items:start}
+
+/* En tablet/móvil: cambiar a tabs */
+@media(max-width:1024px){
   .ped-tabs{display:flex !important}
   .pl{display:block !important;grid-template-columns:unset !important}
   .pl-panel{display:none !important}
@@ -213,6 +210,31 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   .col-menu2{display:block}
   .col-cuenta{order:unset}
 }
+
+/* Desktop: layout normal en 3 columnas */
+@media(min-width:1025px){
+  .ped-tabs{display:none !important}
+  .pl-panel{display:block !important}
+  .col-menu2{display:block !important}
+}
+
+.ped-tabs{
+  display:none;gap:0;margin-bottom:12px;
+  border-radius:12px;overflow:hidden;
+  border:2px solid var(--brd);
+  box-shadow:var(--sh);
+}
+.ped-tab{
+  flex:1;padding:13px 8px;
+  font-size:14px;font-weight:700;
+  border:none;cursor:pointer;
+  background:var(--sf);color:var(--txt2);
+  transition:all .18s;text-align:center;
+  border-right:1px solid var(--brd);
+}
+.ped-tab:last-child{border-right:none}
+.ped-tab.active{background:var(--blue2);color:#fff}
+.ped-tab:hover:not(.active){background:var(--blue5);color:var(--blue2)}
 .mesa-pills{display:flex;flex-wrap:wrap;gap:5px}
 .mpill{padding:5px 11px;border-radius:99px;font-size:12px;font-weight:500;border:1.5px solid var(--brd);cursor:pointer;background:var(--bg);color:var(--txt2);transition:all .15s}
 .mpill:hover{border-color:var(--blue3);color:var(--blue2)}

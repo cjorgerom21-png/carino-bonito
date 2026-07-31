@@ -248,6 +248,36 @@ app.post('/api/bar/cobrar-turno', (req, res) => {
 });
 
 // ── CAJA ─────────────────────────────────────────────────
+// ── LISTAR CIERRES DE CAJA ───────────────────────────────
+app.get('/api/caja/cierres', (req, res) => {
+  const cierres = all(`SELECT * FROM cierres_caja ORDER BY id DESC LIMIT 30`);
+  res.json(cierres);
+});
+
+// ── ELIMINAR CIERRE DE CAJA (reabrir) ────────────────────
+app.delete('/api/caja/cierres/:id', (req, res) => {
+  const id = req.params.id;
+  run('DELETE FROM cierre_empleadas WHERE cierre_id=?', [id]);
+  run('DELETE FROM cierre_cervezas WHERE cierre_id=?', [id]);
+  run('DELETE FROM cierre_platos WHERE cierre_id=?', [id]);
+  run('DELETE FROM cierres_caja WHERE id=?', [id]);
+  res.json({ ok: true });
+});
+
+// ── ELIMINAR MOVIMIENTO BAR ESPECÍFICO ───────────────────
+app.delete('/api/bar/movimientos/:id', (req, res) => {
+  const mov = get('SELECT * FROM bar_movimientos WHERE id=?', [req.params.id]);
+  if (!mov) return res.status(404).json({ error: 'No encontrado' });
+  // Revertir stock
+  if (mov.tipo === 'salio' || mov.tipo === 'venta' || mov.tipo === 'manual') {
+    if (mov.cerveza_id) run('UPDATE cervezas SET stock=stock+? WHERE id=?', [mov.cantidad, mov.cerveza_id]);
+  } else if (mov.tipo === 'devol') {
+    if (mov.cerveza_id) run('UPDATE cervezas SET stock=MAX(0,stock-?) WHERE id=?', [mov.cantidad, mov.cerveza_id]);
+  }
+  run('DELETE FROM bar_movimientos WHERE id=?', [req.params.id]);
+  res.json({ ok: true, revertido: mov });
+});
+
 app.post('/api/caja/cerrar', (req,res) => {
   const {totalDia,mesasCob,totalCervG,totalMenu,porEmpleada,porCerveza,porPlato} = req.body;
   const fecha = new Date().toLocaleDateString('es',{weekday:'long',year:'numeric',month:'long',day:'numeric'});

@@ -640,6 +640,8 @@ tr:hover td{background:var(--blue6)}
     <div style="font-size:15px;font-weight:700;color:var(--blue)">💰 Control de Caja</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="smbtn ok" onclick="verDiasAnteriores()">📅 Días anteriores</button>
+      <button class="smbtn ok" onclick="gestionarCierres()">🔓 Reabrir cierre</button>
+      <button class="smbtn ok" onclick="verRegistroDia()">🗑️ Editar registros</button>
       <button class="smbtn danger" onclick="cerrarCaja()">🔒 Cerrar caja</button>
       <button class="smbtn danger" onclick="resetHoy()" style="background:#FEF2F2;color:#DC2626;border-color:#FCA5A5;font-weight:700">🗑️ Borrar datos de hoy (prueba)</button>
     </div>
@@ -786,6 +788,25 @@ tr:hover td{background:var(--blue6)}
     <div id="mesa-det-body"></div>
   </div>
 </div>
+<!-- Modal reabrir cierre de caja -->
+<div class="ov" id="ov-cierres">
+  <div class="mod" style="max-width:520px">
+    <div class="mod-t">🔓 Reabrir cierre de caja</div>
+    <p style="font-size:12px;color:var(--txt2);margin-bottom:12px">Si cerraste la caja por error, elimina el cierre aquí para seguir registrando. Los datos del día NO se borran.</p>
+    <div id="ov-cierres-body" style="max-height:60vh;overflow-y:auto"></div>
+    <div style="margin-top:12px;text-align:right"><button class="btn bd" onclick="cOv('ov-cierres')">Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Modal editar registros del día -->
+<div class="ov" id="ov-reg-dia">
+  <div class="mod" style="max-width:700px">
+    <div class="mod-t">🗑️ Registros del día — eliminar</div>
+    <div id="ov-reg-dia-body" style="max-height:70vh;overflow-y:auto"></div>
+    <div style="margin-top:12px;text-align:right"><button class="btn bd" onclick="cOv('ov-reg-dia')">Cerrar</button></div>
+  </div>
+</div>
+
 <!-- Modal días anteriores -->
 <div class="ov" id="ov-dias-ant">
   <div class="mod" style="max-width:600px">
@@ -2520,6 +2541,66 @@ async function elimCerv(id) {
 }
 
 // ── CAJA CIERRE → DB ────────────────────────────────────
+async function gestionarCierres() {
+  aOv('ov-cierres');
+  document.getElementById('ov-cierres-body').innerHTML = '<div style="padding:20px;text-align:center;color:var(--txt2)">Cargando...</div>';
+  const cierres = await api('/caja/cierres');
+  if (!cierres?.length) { document.getElementById('ov-cierres-body').innerHTML = '<div style="padding:20px;text-align:center;color:var(--txt2)">No hay cierres registrados</div>'; return; }
+  document.getElementById('ov-cierres-body').innerHTML = cierres.map(c=>`
+    <div style="border:1px solid var(--brd);border-radius:10px;padding:11px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;background:var(--sf)">
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:13px">${c.fecha}</div>
+        <div style="font-size:11px;color:var(--txt2);margin-top:2px">Total: <b>S/${parseFloat(c.total_dia||0).toFixed(2)}</b> · ${c.total_mesas||0} mesas · 🍺${c.total_cervezas||0}</div>
+        <div style="font-size:10px;color:var(--txt2)">Cerrado: ${(c.creado_en||'').slice(0,16)}</div>
+      </div>
+      <button onclick="reabrirCierre(${c.id})" style="padding:7px 14px;border-radius:8px;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;font-size:12px;font-weight:700;cursor:pointer">🔓 Reabrir</button>
+    </div>`).join('');
+}
+
+async function reabrirCierre(id) {
+  if (!confirm('¿Eliminar este cierre?\nPodrás seguir registrando. Los datos NO se borran.')) return;
+  const r = await api('/caja/cierres/'+id, 'DELETE');
+  if (!r) { mostrarToast('⚠️ Error al reabrir','warn'); return; }
+  mostrarToast('✅ Cierre eliminado — puedes seguir trabajando');
+  cOv('ov-cierres');
+  await cargarDatos(); rCaja();
+}
+
+async function verRegistroDia() {
+  aOv('ov-reg-dia');
+  document.getElementById('ov-reg-dia-body').innerHTML = '<div style="padding:20px;text-align:center;color:var(--txt2)">Cargando...</div>';
+  const data = await api('/debug/bar?fecha='+fechaLocal());
+  const movs = data?.deHoy || [];
+  if (!movs.length) { document.getElementById('ov-reg-dia-body').innerHTML = '<div style="padding:20px;text-align:center;color:var(--txt2)">Sin registros del bar hoy</div>'; return; }
+  document.getElementById('ov-reg-dia-body').innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:var(--blue5)">
+        <th style="padding:8px;text-align:left">Hora</th><th style="padding:8px;text-align:left">Empleada</th>
+        <th style="padding:8px;text-align:left">Marca</th><th style="padding:8px;text-align:left">Cant.</th>
+        <th style="padding:8px;text-align:left">Tipo</th><th style="padding:8px;text-align:left">S/</th><th></th>
+      </tr></thead>
+      <tbody>${movs.map(m=>`<tr id="mov-row-${m.id}" style="border-bottom:1px solid var(--brd)">
+        <td style="padding:7px 8px">${m.hora}</td>
+        <td style="padding:7px 8px">${m.emp_nombre||'—'}</td>
+        <td style="padding:7px 8px"><b>${m.marca}</b></td>
+        <td style="padding:7px 8px;font-weight:700;color:${m.tipo==='devol'?'var(--roj)':'var(--vrd)'}">${m.tipo==='devol'?'−':'+'}${m.cantidad}</td>
+        <td style="padding:7px 8px;font-size:10px;color:var(--txt2)">${m.tipo}</td>
+        <td style="padding:7px 8px">S/${(m.cantidad*(m.precio_unit||0)).toFixed(2)}</td>
+        <td style="padding:4px"><button onclick="eliminarMovBar(${m.id})" style="background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer">🗑️</button></td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+}
+
+async function eliminarMovBar(id) {
+  if (!confirm('¿Eliminar este movimiento? Se revertirá el stock.')) return;
+  const r = await api('/bar/movimientos/'+id, 'DELETE');
+  if (!r) { mostrarToast('⚠️ Error','warn'); return; }
+  document.getElementById('mov-row-'+id)?.remove();
+  totalCervG = Math.max(0, totalCervG - 1);
+  await cargarDatos();
+  mostrarToast('🗑️ Movimiento eliminado · stock revertido');
+}
+
 async function verDiasAnteriores() {
   aOv('ov-dias-ant');
   document.getElementById('ov-dias-body').innerHTML = '<div style="padding:20px;text-align:center;color:var(--txt2)">Cargando...</div>';

@@ -2979,13 +2979,17 @@ async function resetHoy(){
   if(!confirm('⚠️ ¿BORRAR TODOS LOS DATOS DE HOY?\n\nEsto elimina:\n• Todos los pedidos de hoy\n• Movimientos del bar de hoy\n• Cierres de caja de hoy\n• Mesas se liberan\n\nEsto NO se puede deshacer.\n¿Continuar?')) return;
   const r = await api('/dia/reset','DELETE');
   if(!r?.ok){ mostrarToast('Error al borrar datos','warn'); return; }
-  // Reiniciar estado local
+  // Resetear TODAS las variables locales
   totalDia=0; mesasCob=0; totalCervG=0; totalMenu=0;
-  empleadas.forEach(e=>{e.cervezas=0;e.ventas=0;e.rb=[];e.mesas=[];e.cobrado=false;e.horaCobro=null;});
+  porCervezaDia=[]; porCategoriaDia=[];
+  empleadas.forEach(e=>{e.cervezas=0;e.ventas=0;e.rb=[];e.mesas=[];e.cobrado=false;e.horaCobro=null;e.pendiente=0;});
   cervezas.forEach(c=>{c.vendidas=0;});
+  mesas.forEach(m=>{m.estado='libre';m.total=0;m.totalCerv=0;m.chica=null;m.empleada_id=null;});
   historial=[];
+  // Recargar desde servidor y forzar render
   await cargarDatos();
-  mostrarToast('✅ Datos de hoy borrados correctamente');
+  rCaja(); rMesas(); rBar(); stats();
+  mostrarToast('✅ Datos de hoy borrados — todo en cero');
 }
 
 

@@ -1433,20 +1433,10 @@ function rBarCards(){
 
 // Actualización ligera: solo actualiza números y registros SIN tocar controles
 function rBarStats(){
-  // Total header — siempre desde rb local (fuente de verdad)
-  let totalHoy = 0;
-  empleadas.forEach(e => e.rb.forEach(r => {
-    if(r.tipo==='devol') totalHoy -= r.qty;
-    else totalHoy += r.qty;
-  }));
-  if(totalHoy <= 0) totalHoy = porCategoriaDia.reduce((s,p)=>s+(parseInt(p.qty)||0),0);
-  if(totalHoy <= 0) totalHoy = totalCervG;
-  document.getElementById('bar-big').textContent = Math.max(0, totalHoy);
-
-  // Contadores por categoría
+  // Contadores por categoría desde rb local (tiempo real)
   const catTotales = {};
   const catIcons = {Cervezas:'🍺',Gaseosas:'🥤',Jugos:'🧃',Bebidas:'💧',Licores:'🍾',Cigarros:'🚬',Snacks:'🍿',Dulces:'🍬',Otros:'📦'};
-  // Calcular desde rb local
+
   empleadas.forEach(e=>{
     e.rb.forEach(r=>{
       const cv = cervezas.find(x=>x.nombre===r.marca);
@@ -1454,17 +1444,28 @@ function rBarStats(){
       catTotales[cat] = (catTotales[cat]||0) + (r.tipo==='devol' ? -r.qty : r.qty);
     });
   });
-  // Si rb está vacío, usar datos del servidor
-  const totalRb = Object.values(catTotales).reduce((s,v)=>s+v,0);
-  if(totalRb === 0 && porCategoriaDia.length > 0){
+
+  // Calcular total de todas las categorías
+  let totalHoy = Object.values(catTotales).reduce((s,v)=>s+Math.max(0,v), 0);
+
+  // Fallback al servidor si rb está vacío (recarga)
+  if(totalHoy === 0 && porCategoriaDia.length > 0){
     porCategoriaDia.forEach(p=>{ catTotales[p.cat] = Math.max(0, parseInt(p.qty)||0); });
+    totalHoy = Object.values(catTotales).reduce((s,v)=>s+v, 0);
   }
+
+  // Actualizar número total
+  document.getElementById('bar-big').textContent = totalHoy || totalCervG;
+
+  // Actualizar cajitas por categoría
   const catEl = document.getElementById('bar-cat-counts');
-  if(catEl) catEl.innerHTML = Object.entries(catTotales).filter(([,q])=>q>0).map(([cat,qty])=>`
-    <div style="background:rgba(255,255,255,.12);border-radius:10px;padding:5px 12px;text-align:center;min-width:60px">
-      <div style="font-size:18px;font-weight:800;color:#fff">${qty}</div>
-      <div style="font-size:9px;color:rgba(255,255,255,.7);font-weight:600;text-transform:uppercase;letter-spacing:.3px">${catIcons[cat]||'📦'} ${cat}</div>
-    </div>`).join('');
+  if(catEl) catEl.innerHTML = Object.entries(catTotales)
+    .filter(([,q])=>q>0)
+    .map(([cat,qty])=>`
+      <div style="background:rgba(255,255,255,.12);border-radius:10px;padding:5px 12px;text-align:center;min-width:60px">
+        <div style="font-size:18px;font-weight:800;color:#fff">${qty}</div>
+        <div style="font-size:9px;color:rgba(255,255,255,.7);font-weight:600;text-transform:uppercase;letter-spacing:.3px">${catIcons[cat]||'📦'} ${cat}</div>
+      </div>`).join('');
 
   // Ranking en tiempo real
   const sorted=[...empleadas].sort((a,b)=>(b.cervezas-a.cervezas)||((calcTotalEmp(b))-(calcTotalEmp(a))));
@@ -2389,9 +2390,8 @@ async function bReg(eid, tipo) {
     </tr>`;
   }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--txt2);padding:14px">Sin movimientos</td></tr>';
 
-  // Actualizar ranking y stats globales
-  const elBigCerv = document.getElementById('bar-big');
-  if(elBigCerv) elBigCerv.textContent = totalCervG;
+  // Actualizar ranking y stats globales — INMEDIATO
+  rBarStats();
   stats();
 
   // ── Guardar en servidor en background ──

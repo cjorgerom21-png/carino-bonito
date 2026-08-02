@@ -470,17 +470,25 @@ app.get('/api/dia/resumen/fecha/:fecha', (req, res) => {
 app.delete('/api/dia/reset', (req, res) => {
   const h = hoy(req);
   try {
-    // Borrar TODOS los pedidos no cobrados (sin filtro de fecha)
-    const pedidosPend = all('SELECT id FROM pedidos WHERE cobrado=0');
-    pedidosPend.forEach(p => run('DELETE FROM pedido_items WHERE pedido_id=?', [p.id]));
-    run('DELETE FROM pedidos WHERE cobrado=0');
-    // Borrar movimientos de bar de hoy Y de cualquier fecha no cobrada
+    // Borrar TODOS los pedidos del día (cobrados y no cobrados)
+    const todosIds = all('SELECT id FROM pedidos WHERE fecha IN (?,?)', [h, new Date().toISOString().split('T')[0]]);
+    // También borrar todos si es reset completo
+    const todosHoy = all('SELECT id FROM pedidos WHERE fecha=? OR fecha=?', [h, new Date().toISOString().split('T')[0]]);
+    todosHoy.forEach(p => run('DELETE FROM pedido_items WHERE pedido_id=?', [p.id]));
+    run('DELETE FROM pedidos WHERE fecha=?', [h]);
+    run('DELETE FROM pedidos WHERE fecha=?', [new Date().toISOString().split('T')[0]]);
+    run('DELETE FROM pedidos WHERE cobrado=0'); // por si quedan huérfanos
+    // Bar
     run('DELETE FROM bar_movimientos WHERE fecha=?', [h]);
-    // También borrar movimientos sin fecha o con fecha rara
+    run('DELETE FROM bar_movimientos WHERE fecha=?', [new Date().toISOString().split('T')[0]]);
     run("DELETE FROM bar_movimientos WHERE fecha IS NULL OR fecha=''");
+    // Cobros y historial
     try { run('DELETE FROM cobros_turno WHERE fecha=?', [h]); } catch(e2) {}
+    try { run('DELETE FROM cobros_turno WHERE fecha=?', [new Date().toISOString().split('T')[0]]); } catch(e2) {}
     try { run('DELETE FROM historial_dia WHERE fecha=?', [h]); } catch(e3) {}
-    const cierresHoy = all("SELECT id FROM cierres_caja WHERE date(creado_en)=?", [h]);
+    try { run('DELETE FROM historial_dia WHERE fecha=?', [new Date().toISOString().split('T')[0]]); } catch(e3) {}
+    // Cierres de caja de hoy
+    const cierresHoy = all("SELECT id FROM cierres_caja WHERE date(creado_en) IN (?,?)", [h, new Date().toISOString().split('T')[0]]);
     cierresHoy.forEach(c => {
       run('DELETE FROM cierre_empleadas WHERE cierre_id=?', [c.id]);
       run('DELETE FROM cierre_cervezas WHERE cierre_id=?', [c.id]);

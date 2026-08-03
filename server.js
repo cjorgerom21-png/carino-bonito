@@ -436,6 +436,67 @@ app.get('/api/mesas/:id/detalle', (req, res) => {
   res.json({ mesa, items: Object.values(agrupado), total, num_pedidos: pedidos.length });
 });
 
+// ── COCINA — ÓRDENES PENDIENTES ──────────────────────────
+app.get('/api/cocina/ordenes', (req, res) => {
+  const h = hoy(req);
+  const hUTC = new Date().toISOString().split('T')[0];
+  const F = h !== hUTC ? [h, hUTC] : [h];
+  const ph = F.map(()=>'?').join(',');
+  // Pedidos no cobrados con items de menú (no cerveza)
+  const pedidos = all(`
+    SELECT p.id, p.mesa_id, p.hora, p.empleada_id, p.cocina_listo,
+           e.nombre as emp_nombre, e.color as emp_color
+    FROM pedidos p
+    LEFT JOIN empleadas e ON e.id=p.empleada_id
+    WHERE p.fecha IN (${ph}) AND p.cobrado=0
+    ORDER BY p.id ASC
+  `, F);
+  pedidos.forEach(p => {
+    p.items = all(`SELECT * FROM pedido_items WHERE pedido_id=? AND tipo!='cerveza'`, [p.id]);
+  });
+  // Solo devolver pedidos que tienen items de cocina
+  res.json(pedidos.filter(p => p.items.length > 0));
+});
+
+// ── COCINA — MARCAR LISTO ─────────────────────────────────
+app.post('/api/cocina/listo/:pedidoId', (req, res) => {
+  const { pedidoId } = req.params;
+  const hr = hora(req);
+  // Agregar columna si no existe
+  try { run(`ALTER TABLE pedidos ADD COLUMN cocina_listo INTEGER DEFAULT 0`); } catch(e) {}
+  try { run(`ALTER TABLE pedidos ADD COLUMN cocina_hora TEXT`); } catch(e) {}
+  run('UPDATE pedidos SET cocina_listo=1, cocina_hora=? WHERE id=?', [hr, pedidoId]);
+  const pedido = get('SELECT * FROM pedidos WHERE id=?', [pedidoId]);
+  res.json({ ok: true, hora: hr, mesa_id: pedido?.mesa_id });
+});
+
+// ── COCINA — NOTIFICACIONES (pedidos listos sin entregar) ──
+app.get('/api/cocina/listos', (req, res) => {
+  try { run(`ALTER TABLE pedidos ADD COLUMN cocina_listo INTEGER DEFAULT 0`); } catch(e) {}
+  try { run(`ALTER TABLE pedidos ADD COLUMN cocina_hora TEXT`); } catch(e) {}
+  try { run(`ALTER TABLE pedidos ADD COLUMN cocina_entregado INTEGER DEFAULT 0`); } catch(e) {}
+  const h = hoy(req);
+  const hUTC = new Date().toISOString().split('T')[0];
+  const F = h !== hUTC ? [h, hUTC] : [h];
+  const ph = F.map(()=>'?').join(',');
+  const listos = all(`
+    SELECT p.id, p.mesa_id, p.cocina_hora, p.cocina_entregado,
+           GROUP_CONCAT(pi.nombre || ' x' || pi.cantidad, ', ') as items_txt
+    FROM pedidos p
+    JOIN pedido_items pi ON pi.pedido_id=p.id AND pi.tipo!='cerveza'
+    WHERE p.fecha IN (${ph}) AND p.cocina_listo=1 AND (p.cocina_entregado IS NULL OR p.cocina_entregado=0) AND p.cobrado=0
+    GROUP BY p.id ORDER BY p.id DESC
+  `, F);
+  res.json(listos);
+});
+
+// ── COCINA — MARCAR ENTREGADO ─────────────────────────────
+app.post('/api/cocina/entregar/:pedidoId', (req, res) => {
+  try { run(`ALTER TABLE pedidos ADD COLUMN cocina_entregado INTEGER DEFAULT 0`); } catch(e) {}
+  run('UPDATE pedidos SET cocina_entregado=1 WHERE id=?', [req.params.pedidoId]);
+  res.json({ ok: true });
+});
+
 // ── FECHAS DISPONIBLES ───────────────────────────────────
 app.get('/api/fechas', (req, res) => {
   const fechas = all(`

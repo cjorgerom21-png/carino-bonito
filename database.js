@@ -170,6 +170,9 @@ insertarDatosIniciales();
 try { db.prepare(`ALTER TABLE cobros_turno ADD COLUMN parcial INTEGER DEFAULT 0`).run(); } catch(e) {}
 try { db.prepare(`ALTER TABLE cervezas ADD COLUMN categoria TEXT DEFAULT 'Cervezas'`).run(); } catch(e) {}
 try { db.prepare(`ALTER TABLE bar_movimientos ADD COLUMN categoria TEXT DEFAULT 'Cervezas'`).run(); } catch(e) {}
+try { db.prepare(`ALTER TABLE pedidos ADD COLUMN cocina_listo INTEGER DEFAULT 0`).run(); } catch(e) {}
+try { db.prepare(`ALTER TABLE pedidos ADD COLUMN cocina_hora TEXT`).run(); } catch(e) {}
+try { db.prepare(`ALTER TABLE pedidos ADD COLUMN cocina_entregado INTEGER DEFAULT 0`).run(); } catch(e) {}
 try { db.prepare(`CREATE TABLE IF NOT EXISTS historial_dia (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT, hora TEXT, mesa TEXT, tipo TEXT, txt TEXT, monto REAL DEFAULT 0, chica TEXT, icon TEXT)`).run(); } catch(e) {}
 
 console.log(`📦 DB en: ${DB_PATH}`);

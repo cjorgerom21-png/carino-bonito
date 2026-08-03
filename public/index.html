@@ -1138,9 +1138,7 @@ async function eliminarPedido(pedidoId, mesaId) {
   if (!confirm('¿Eliminar este pedido? El monto se restará del total de la mesa.')) return;
   const r = await api('/pedidos/'+pedidoId, 'DELETE');
   if (!r) { mostrarToast('⚠️ Error al eliminar pedido','warn'); return; }
-  // Restar del total local
   totalDia = Math.max(0, totalDia - (r.total_restado||0));
-  // Actualizar mesa local
   const mesa = mesas.find(m=>m.id===mesaId);
   if (mesa) {
     mesa.total = Math.max(0, (mesa.total||0) - (r.total_restado||0));
@@ -1149,12 +1147,12 @@ async function eliminarPedido(pedidoId, mesaId) {
   // Quitar fila del modal
   const row = document.getElementById('ped-row-'+pedidoId);
   if (row) row.remove();
-  // Si no quedan filas
-  const body = document.getElementById('ov-pm-body');
-  if (body && !body.querySelector('[id^="ped-row-"]')) {
-    body.innerHTML='<div style="text-align:center;padding:20px;color:var(--txt2)">Sin pedidos registrados</div>';
+  if (document.getElementById('ov-pm-body') && !document.getElementById('ov-pm-body').querySelector('[id^="ped-row-"]')) {
+    document.getElementById('ov-pm-body').innerHTML='<div style="text-align:center;padding:20px;color:var(--txt2)">Sin pedidos registrados</div>';
   }
-  stats(); rMesas();
+  // Recargar datos para reflejar cambios en bar_movimientos y rb
+  await cargarDatos();
+  stats(); rMesas(); rBarStats();
   mostrarToast(`🗑️ Pedido eliminado · S/ ${(r.total_restado||0).toFixed(2)} restado de caja`);
 }
 

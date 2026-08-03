@@ -384,15 +384,19 @@ app.delete('/api/mesas/:id/pedidos', (req, res) => {
 app.delete('/api/pedidos/:id', (req, res) => {
   const pedido = get('SELECT * FROM pedidos WHERE id=?', [req.params.id]);
   if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
-  // Revertir stock de cervezas
   const items = all('SELECT * FROM pedido_items WHERE pedido_id=?', [req.params.id]);
   items.forEach(it => {
-    if (it.tipo === 'cerveza') run('UPDATE cervezas SET stock=stock+? WHERE nombre=?', [it.cantidad, it.marca]);
+    if (it.tipo === 'cerveza') {
+      // Revertir stock
+      run('UPDATE cervezas SET stock=stock+? WHERE nombre=?', [it.cantidad, it.marca]);
+      // Eliminar el movimiento de bar generado por este pedido
+      run(`DELETE FROM bar_movimientos WHERE mesa_id=? AND marca=? AND tipo='venta' AND fecha=? AND hora=?`,
+        [pedido.mesa_id, it.marca, pedido.fecha, pedido.hora]);
+    }
   });
   run('DELETE FROM pedido_items WHERE pedido_id=?', [req.params.id]);
   run('DELETE FROM pedidos WHERE id=?', [req.params.id]);
-  // Si no quedan pedidos en la mesa, liberarla
-  const resto = get('SELECT COUNT(*) as n FROM pedidos WHERE mesa_id=? AND cobrado=0 AND fecha=?', [pedido.mesa_id, hoy(req)]);
+  const resto = get('SELECT COUNT(*) as n FROM pedidos WHERE mesa_id=? AND cobrado=0', [pedido.mesa_id]);
   if ((resto?.n || 0) === 0) run("UPDATE mesas SET estado='libre', empleada_id=NULL WHERE id=?", [pedido.mesa_id]);
   res.json({ ok: true, total_restado: pedido.total, mesa_id: pedido.mesa_id });
 });

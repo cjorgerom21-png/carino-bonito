@@ -236,6 +236,17 @@ app.post('/api/bar/movimientos', (req,res) => {
 });
 
 // ── COBRO DE TURNO EMPLEADA ──────────────────────────────
+// ── REABRIR TURNO (sin borrar datos) ─────────────────────
+app.post('/api/bar/cobrar-turno/reabrir', (req, res) => {
+  const { empleada_id } = req.body;
+  const h = hoy(req);
+  const hUTC = new Date().toISOString().split('T')[0];
+  // Marcar el último cierre completo como parcial para que no aparezca como cerrado
+  run(`UPDATE cobros_turno SET parcial=1 WHERE empleada_id=? AND fecha IN (?,?) AND parcial=0 ORDER BY id DESC LIMIT 1`,
+    [empleada_id, h, hUTC]);
+  res.json({ ok: true });
+});
+
 app.post('/api/bar/cobrar-turno', (req, res) => {
   const { empleada_id, total, cervezas: totalCerv, parcial } = req.body;
   const h = hoy(req), hr = hora(req);

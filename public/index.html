@@ -1278,6 +1278,23 @@ function rPedido(){
   document.getElementById('cta-mesa').textContent=mesaSel||'—';
   rCuenta();
 }
+function reabrirTurno(eid) {
+  const emp = empleadas.find(e=>e.id===eid);
+  if (!emp) return;
+  if (!confirm(`¿Reabrir turno de ${emp.nombre}?\n\nSe mantienen todas las ventas y cobros registrados.\nEl turno quedará activo para seguir registrando.`)) return;
+  // Solo quitar el estado cerrado — NO borrar datos
+  emp.cobrado   = false;
+  emp.horaCobro = null;
+  // El pendiente se mantiene para que se vea lo que ya pagó
+  rBar();
+  mostrarToast(`🔓 Turno de ${emp.nombre} reabierto — datos conservados`);
+  // También revertir en servidor: borrar el último cobro completo de esta empleada
+  api('/bar/cobrar-turno/reabrir','POST',{
+    ...tsLocal(),
+    empleada_id: eid
+  });
+}
+
 function nuevoTurno(eid) {
   const emp = empleadas.find(e=>e.id===eid);
   if (!emp) return;
@@ -1403,8 +1420,11 @@ function rBarCards(){
               <span style="color:${r.tipo==='devol'?'#dc2626':'#059669'}">${r.tipo==='devol'?'−':'+'}${r.qty}</span>
             </div>`).join('')}
         </div>
-        <button onclick="nuevoTurno(${e.id})" style="width:100%;margin-top:14px;padding:11px;border-radius:10px;background:var(--blue2);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+        <button onclick="nuevoTurno(${e.id})" style="width:100%;margin-top:8px;padding:11px;border-radius:10px;background:var(--blue2);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
           🔄 Nuevo turno
+        </button>
+        <button onclick="reabrirTurno(${e.id})" style="width:100%;margin-top:6px;padding:10px;border-radius:10px;background:rgba(255,255,255,.1);color:#6ee7b7;border:1.5px solid #10b981;font-size:13px;font-weight:700;cursor:pointer">
+          🔓 Reabrir turno (mantiene datos)
         </button>
       </div>
     </div>`;
